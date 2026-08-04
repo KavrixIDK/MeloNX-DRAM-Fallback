@@ -1,8 +1,0 @@
-<linker>
-  <assembly fullname="CommandLine">
-    <type fullname="CommandLine.*" preserve="all" />
-  </assembly>
-  <assembly fullname="Ryujinx.Library">
-    <type fullname="Ryujinx.Library.Options" preserve="all" />
-  </assembly>
-</linker>
