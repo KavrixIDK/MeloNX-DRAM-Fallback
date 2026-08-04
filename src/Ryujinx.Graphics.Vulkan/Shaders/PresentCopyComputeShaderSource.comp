@@ -1,0 +1,47 @@
+#version 450 core
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (std140, binding = 0) uniform present_params
+{
+    vec4 src_region;
+    vec4 dst_region;
+};
+
+layout (set = 2, binding = 0) uniform sampler2D src;
+layout (rgba8, set = 3, binding = 0) writeonly uniform image2D dst;
+
+void main()
+{
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dst0 = ivec2(dst_region.xy);
+    ivec2 dst1 = ivec2(dst_region.zw);
+    ivec2 dst_min = min(dst0, dst1);
+    ivec2 dst_extent = abs(dst1 - dst0);
+    
+    if (local.x >= dst_extent.x || local.y >= dst_extent.y)
+    {
+        return;
+    }
+
+    vec2 scale = (vec2(local) + vec2(0.5)) / vec2(dst_extent);=
+    vec2 src0 = vec2(src_region.x, src_region.z);
+    vec2 src1 = vec2(src_region.y, src_region.w);
+
+    if (dst0.x > dst1.x)
+    {
+        scale.x = 1.0 - scale.x;
+    }
+
+    if (dst0.y > dst1.y)
+    {
+        scale.y = 1.0 - scale.y;
+    }
+
+    vec2 src_coord = mix(src0, src1, scale);
+    vec2 src_size = vec2(textureSize(src, 0));
+    vec4 color = texture(src, src_coord / src_size);
+
+    color.a = 1.0;
+    imageStore(dst, dst_min + local, color);
+}

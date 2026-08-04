@@ -1,0 +1,619 @@
+//
+//  SettingsView.swift
+//  MeloNX
+//
+//  Created by Stossy11 on 23/4/2026.
+//
+
+import SwiftUI
+import UIKit
+import Melo_Controller
+import UniformTypeIdentifiers
+import NavigationStackBackport
+
+struct PerGameSettingsView: View {
+    @EnvironmentObject var ryujinxController: RyujinxController
+    @StateObject public var nativeSettingsManager: NativeSettingsManager
+    @ObservedObject var controllerManager = ControllerManager.shared
+    let appEnvironment: AppEnvironment = .shared
+    let titleId: String
+    @Environment(\.dismiss) var dismiss
+
+    
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.verticalSizeClass) var verticalSizeClass: UserInterfaceSizeClass?
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass: UserInterfaceSizeClass?
+    
+    @State private var selectedCategory: SettingsCategory = .graphics
+    @State private var isShowingGameController = false
+    @State private var showOSIcon = true
+    @State private var showingAppIconSwitcher = false
+    @FocusState private var isArgumentsKeyboardVisible: Bool
+    
+    private var config: Binding<Options> {
+        Binding(
+            get: { ryujinxController.perSettings[titleId] ?? Options(inputPath: "") },
+            set: {
+                ryujinxController.perSettings[titleId] = $0
+                ryujinxController.savePerGameConfig(titleId)
+            }
+        )
+    }
+    
+    var currentResolution: String {
+        let base: Int = config.wrappedValue.disableDockedMode ? 720 : 1080
+        let val = Float(base) * config.wrappedValue.resScale
+        return val.toOneDecimalString() + "p"
+    }
+    
+    private let memoryManagerModes: [(MemoryManagerMode, String)] = [
+        (.hostMapped, "Host (fast)"),
+        (.hostMappedUnsafe, "Host Unchecked (fast, unstable / unsafe)"),
+        (.softwarePageTable, "Software (slow)"),
+    ]
+    
+    private let totalMemory = ProcessInfo.processInfo.physicalMemory
+    
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+    }
+    
+    private var isRegularLayout: Bool {
+        (horizontalSizeClass == .regular && verticalSizeClass == .regular) ||
+        (horizontalSizeClass == .regular && verticalSizeClass == .compact)
+    }
+    
+    private var deviceIcon: String {
+        let model = UIDevice.modelName
+        if model.contains("iPad") { return "ipad" }
+        if model.contains("iPhone") { return "iphone" }
+        return "desktopcomputer"
+    }
+    
+    private var memoryText: String {
+        let divisor = ProcessInfo.processInfo.isiOSAppOnMac ? (1024 * 1024 * 1024) : 1_000_000_000
+        return String(format: "%.0f GB", Double(totalMemory) / Double(divisor))
+    }
+    
+    private var systemVersionString: String {
+        let versionPart = ProcessInfo.processInfo.operatingSystemVersionString
+            .replacingOccurrences(of: "Version ", with: "")
+        let parts = versionPart.components(separatedBy: " (Build ")
+        let osName = ProcessInfo.processInfo.isiOSAppOnMac ? "macOS" : UIDevice.current.systemName
+        if parts.count == 2 {
+            let build = parts[1].replacingOccurrences(of: ")", with: "")
+            return "\(osName) \(parts[0]) (\(build))"
+        }
+        return "\(osName) \(UIDevice.current.systemVersion)"
+    }
+    
+    private var osVersionString: String {
+        let osName = ProcessInfo.processInfo.isiOSAppOnMac
+        ? "macOS"
+        : UIDevice.current.systemName
+        
+        return "\(osName) \(UIDevice.current.systemVersion)"
+    }
+    
+    enum SettingsCategory: LocalizedStringKey, CaseIterable, Identifiable {
+        case graphics = "Graphics"
+        case misc     = "Misc"
+        case system   = "System"
+        case advanced = "Advanced"
+        
+        var id: String { "\(rawValue)" }
+        
+        var icon: String {
+            switch self {
+            case .graphics: return "paintbrush.fill"
+            case .system:   return "gearshape.fill"
+            case .misc:     return "ellipsis.circle.fill"
+            case .advanced: return "terminal.fill"
+            }
+        }
+        
+        @ViewBuilder
+        func formView(for parent: PerGameSettingsView) -> some View {
+            switch self {
+            case .graphics: parent.graphicsForm
+            case .misc:     parent.miscForm
+            case .system:   parent.systemForm
+            case .advanced: parent.advancedForm
+            }
+        }
+    }
+    
+    var isPortrait: Bool {
+        AlertHandlers.topWindow().bounds.height > AlertHandlers.topWindow().bounds.width
+    }
+    
+    init(_ titleId: String) {
+        self._nativeSettingsManager = StateObject(wrappedValue: NativeSettingsManager(titleId, true))
+        self.titleId = titleId
+    }
+    
+    // MARK: - Body
+    
+    var body: some View {
+        iOSSettings
+            .onAppear() {
+                ryujinxController.loadPerGameConfig(titleId)
+            }
+    }
+    
+    // MARK: - Main (iOS on normal settings, but .popOver doesn't allow for our split view)
+    
+    var iOSSettings: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                VStack(spacing: 8) {
+                    
+                    let cols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
+                    LazyVGrid(columns: cols, spacing: 8) {
+                        ForEach(SettingsCategory.allCases) { category in
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    selectedCategory = category
+                                }
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: category.icon)
+                                        .font(.system(size: 15, weight: .medium))
+                                    Text(category.rawValue)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48)
+                                .background(
+                                    selectedCategory == category
+                                    ? Color.accentColor
+                                    : Color(.tertiarySystemGroupedBackground),
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                )
+                                .foregroundStyle(
+                                    selectedCategory == category ? Color.white : Color.primary
+                                )
+                                .animation(.easeInOut(duration: 0.18), value: selectedCategory)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .padding(.vertical, 10)
+                .background(Color(.secondarySystemGroupedBackground))
+                
+                Divider()
+                
+                selectedCategory.formView(for: self)
+                    .id(selectedCategory.id)
+                
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Done")
+                    }
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        nativeSettingsManager.reset()
+                        ryujinxController.perSettings.removeValue(forKey: titleId)
+                        dismiss()
+                    } label: {
+                        Text("Remove")
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear(perform: loadSettings)
+        }
+    }
+    
+    var selectedCategoryOp: Binding<SettingsCategory?> {
+        .init {
+            selectedCategory
+        } set: { set in
+            selectedCategory = set ?? .system
+        }
+        
+    }
+    
+    // MARK: - Graphics Form
+    
+    var graphicsForm: some View {
+        Form {
+            // Resolution Scale
+            Section {
+                if nativeSettingsManager.allowCustomResValue.value {
+                    let formatter: NumberFormatter = {
+                        let f = NumberFormatter(); f.numberStyle = .decimal; return f
+                    }()
+                    HStack {
+                        Text("Resolution Scale")
+                        Spacer()
+                        TextField("Scale", value: config.resScale, formatter: formatter)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                } else {
+                    SliderRow(
+                        "Resolution Scale",
+                        value: config.resScale,
+                        range: 0.1...4.0,
+                        step: 0.05,
+                        minLabel: "0.1x",
+                        maxLabel: "4.0x",
+                        extended: "(\(currentResolution))"
+                    )
+                }
+            } header: {
+                HStack {
+                    Text("Resolution")
+                    Spacer()
+                    InfoButton(
+                        title: "Resolution Scale",
+                        message: "Adjust the internal rendering resolution. Higher values improve visuals but may reduce performance. Lowering is unsupported for some games and may cause crashing."
+                    )
+                }
+            } footer: {
+                if nativeSettingsManager.allowCustomResValue.value {
+                    Text("Custom scale mode enabled via long-press.")
+                }
+            }
+            .contextMenu {
+                Button {
+                    nativeSettingsManager.allowCustomResValue.value = !(nativeSettingsManager.allowCustomResValue.value as Bool)
+                } label: {
+                    Label(
+                        nativeSettingsManager.allowCustomResValue.value
+                        ? "Disable Custom Resolution Scale"
+                        : "Allow Any Resolution Scale",
+                        systemImage: nativeSettingsManager.allowCustomResValue.value ? "checkmark" : "slider.horizontal.3"
+                    )
+                }
+            }
+            
+            // Anisotropic Filtering
+            Section {
+                SliderRow(
+                    "Max Anisotropic Filtering",
+                    value: config.maxAnisotropy,
+                    range: 0...16.0,
+                    step: 0.1,
+                    minLabel: "Off",
+                    maxLabel: "16x",
+                    format: "%.1f"
+                )
+            } header: {
+                HStack {
+                    Text("Filtering")
+                    Spacer()
+                    InfoButton(
+                        title: "Max Anisotropic Filtering",
+                        message: "Adjust the internal anisotropic filtering. Higher values improve texture quality at angles. Default (0) lets the game decide."
+                    )
+                }
+            }
+            
+            Section("Scaling Options") {
+                Picker("Scaling Filter", selection: config.scalingFilter) {
+                    ForEach(ScalingFilter.allCases, id: \.self) { filter in
+                        Text(filter.displayName).tag(filter)
+                    }
+                }
+                .pickerStyle(.menu)
+                
+                if config.wrappedValue.scalingFilter == .fsr {
+                    let levelBinding = Binding<Float>(
+                        get: { Float(config.wrappedValue.scalingFilterLevel) },
+                        set: { config.wrappedValue.scalingFilterLevel = Int32($0) }
+                    )
+                    
+                    SliderRow(
+                        "Filter Sharpness",
+                        value: levelBinding,
+                        range: 0...100.0,
+                        step: 1.0,
+                        minLabel: "0%",
+                        maxLabel: "100%",
+                        format: "%.0f"
+                    )
+                }
+            }
+            
+            // Display Toggles
+            Section("Display") {
+                let vSyncModeBinding = Binding<VSyncMode>(
+                    get: { config.wrappedValue.vSyncMode },
+                    set: {
+                        config.wrappedValue.vSyncMode = $0
+                        config.wrappedValue.disableVSync = $0 == .unbounded
+                    }
+                )
+                let customVSyncIntervalBinding = Binding<Float>(
+                    get: { Float(config.wrappedValue.customVSyncInterval / 2) },
+                    set: { config.wrappedValue.customVSyncInterval = max(1, Int32($0.rounded() * 2)) }
+                )
+
+                NativeToggleRow("Shader Cache", icon: "memorychip",
+                                isOn: config.disableShaderCache.reversed,
+                                info: "Shader Cache saves shaders to a file and preloads them on game launch. Leave OFF if unsure.")
+                
+                Picker("VSync Mode", selection: vSyncModeBinding) {
+                    ForEach(VSyncMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if config.wrappedValue.vSyncMode == .custom {
+                    let formatter: NumberFormatter = {
+                        let f = NumberFormatter(); f.numberStyle = .none; return f
+                    }()
+                    HStack {
+                        Text("Custom VSync FPS")
+                        Spacer()
+                        TextField("FPS", value: customVSyncIntervalBinding, formatter: formatter)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                }
+
+                NativeToggleRow("Docked Mode", icon: "dock.rectangle",
+                                isOn: config.disableDockedMode.reversed,
+                                info: "Docked mode emulates a docked Nintendo Switch, improving graphics. Disabling emulates handheld mode. Leave OFF if unsure.")
+                NativeToggleRow("Macro HLE", icon: "gearshape",
+                                isOn: config.disableMacroHLE.reversed,
+                                info: "High-level emulation of GPU Macro code. Improves performance but may cause graphical glitches. Leave OFF if unsure.")
+                
+                NativeToggleRow("Async Shader Compilation (EXPERIMENTAL)", icon: "bolt.horizontal.circle",
+                                isOn: config.enableAsyncShaderCompilation,
+                                info: "Compiles Vulkan shader pipelines in the background to reduce stalls. Newly seen effects may appear after compilation finishes. May break graphics or cause crashes in some games.")
+                .tint(.red)
+                .foregroundStyle(.red)
+            }
+            
+            // Performance Overlay
+            Section("Performance Overlay") {
+                NativeToggleRow("Performance Overlay", icon: "speedometer",
+                                isOn: nativeSettingsManager.performacehud.projectedValue,
+                                info: "Shows framerate, frametime, memory usage, fifo (First In, First Out) and battery info while a game is running.")
+                
+                if nativeSettingsManager.performacehud.value {
+                    NativeToggleRow("Show Battery Percentage", icon: "battery.100percent.bolt",
+                                    isOn: nativeSettingsManager.showBatteryPercentage.projectedValue)
+                    
+                    NativeToggleRow("Show Frame Time", icon: "clock.arrow.2.circlepath",
+                                    isOn: nativeSettingsManager.performanceFrameTime(true).projectedValue)
+                    
+                    NativeToggleRow("Show Memory Usage", icon: "memorychip",
+                                    isOn: nativeSettingsManager.performanceRam(true).projectedValue)
+                    
+                    NativeToggleRow("Show FIFO", icon: "arrow.left.arrow.right",
+                                    isOn: nativeSettingsManager.performanceFIFO.projectedValue)
+                    
+                    NativeToggleRow("Horizontal Layout", icon: "rotate.right",
+                                    isOn: nativeSettingsManager.horizontalorvertical.projectedValue,
+                                    info: "Changes the Performance Overlay to display horizontally instead of vertically.")
+                    
+                    NativeToggleRow("Move Overlay below Screen", icon: "arrow.uturn.down",
+                                    isOn: nativeSettingsManager.overlayBelowScreen(true).projectedValue,
+                                    info: "When device is in portrait, the overlay will be moved below the game screen.")
+                    
+                }
+                
+                Picker("Overlay Position", selection: nativeSettingsManager.performancePosition(PerformanceOverlayPosition.topRight).projectedValue) {
+                    ForEach(PerformanceOverlayPosition.allCases, id: \.self) { position in
+                        Text(position.displayValue).tag(position)
+                    }
+                }
+            }
+            
+            // Aspect Ratio
+            Section("Aspect Ratio") {
+                Picker("Aspect Ratio", selection: config.aspectRatio) {
+                    ForEach(AspectRatio.allCases, id: \.self) { ratio in
+                        Text(ratio.displayName).tag(ratio)
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    // MARK: - System Form
+    
+    var systemForm: some View {
+        Form {
+            Section("Language & Region") {
+                Picker("System Language", selection: config.systemLanguage) {
+                    ForEach(Array(SystemLanguage.allCases), id: \.self) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                
+                Picker("Region", selection: config.systemRegion) {
+                    ForEach(Array(NativeRegionCode.allCases), id: \.self) { region in
+                        Text(region.displayName).tag(region)
+                    }
+                }
+            }
+            
+            Section {
+                Picker("Memory Manager Mode", selection: config.memoryManagerMode) {
+                    ForEach(memoryManagerModes, id: \.0.rawValue) { mode, name in
+                        Text(name).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+            } header: {
+                Text("CPU Configuration")
+            }
+        }
+    }
+    
+    var advancedForm: some View {
+        Form {
+            Section("Debug Logging") {
+                NativeToggleRow("Debug Logs", icon: "exclamationmark.bubble",
+                                isOn: config.loggingEnableDebug,
+                                info: "Prints debug log messages. Only enable if asked by a staff member — it degrades performance and makes logs harder to read.")
+                NativeToggleRow("Trace Logs", icon: "waveform.path",
+                                isOn: config.loggingEnableTrace,
+                                info: "Prints trace log messages. Does not affect performance.")
+                NativeToggleRow("Write Logs to stdout", icon: "hammer",
+                                isOn: nativeSettingsManager.writeStdout.projectedValue,
+                                info: "Write logs to stdout, disabling the default log file output.")
+            }
+            
+            Section("Behaviour") {
+                NativeToggleRow("Disable FS Integrity Checks", icon: "checkmark.shield",
+                                isOn: config.disableFsIntegrityChecks,
+                                info: "Checks for corrupt files when booting. Hash errors appear in the log if corruption is found. Leave OFF if unsure.")
+                NativeToggleRow("Ignore JIT Popup", icon: "cpu",
+                                isOn: nativeSettingsManager.ignoreJIT.projectedValue,
+                                info: "Ignores the JIT popup and tries to load the game regardless.")
+            }
+            
+            Section {
+                NativeToggleRow("Expand Guest RAM", icon: "memorychip.fill",
+                                isOn: config.expandRAM,
+                                info: "Uses an alternative memory mode with 8 GiB DRAM to mimic a Switch dev unit. Only useful for high-res texture packs or 4K mods. Does NOT improve performance. Leave OFF if unsure.")
+                .disabled(totalMemory < 5723)
+                NativeToggleRow("Ignore Missing Services", icon: "waveform.path",
+                                isOn: config.ignoreMissingServices,
+                                info: "Ignores unimplemented Horizon OS services. May help bypass crashes on certain games. Leave OFF if unsure.")
+            } header: {
+                Text("Memory")
+            } footer: {
+                if totalMemory < 5723 {
+                    Text("Expand Guest RAM requires at least 6 GB of physical memory.")
+                }
+            }
+            
+            Section("System Info") {
+                LabeledRow(label: "Page Size", value: String(Int(getpagesize())))
+                if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let bounds = scene.windows.first?.bounds {
+                    LabeledRow(label: "App Resolution", value: "\(Int(bounds.width))×\(Int(bounds.height))")
+                }
+            }
+            
+            Section {
+                HStack {
+                    Text("In memoriam of 'Lily'")
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    Image(systemName: "heart")
+                        .foregroundColor(.purple)
+                        .font(.footnote)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+        }
+    }
+    
+    
+    // MARK: - Misc Form
+    
+    var miscForm: some View {
+        Form {
+            // Custom ROM Folders
+            Section("Custom ROM Folders") {
+                FolderListView()
+            }
+            
+            // Network
+            Section {
+                NativeToggleRow("Guest Internet Access / LAN Mode", icon: "wifi.router.fill",
+                                isOn: config.enableInternetAccess,
+                                info: "Allows the emulated app to connect to the Internet. LAN mode games can connect across devices on the same network, including real consoles. Does NOT connect to Nintendo servers. May cause crashes in some games. Leave OFF if unsure.")
+                NativeToggleRow("ldn_mitm", icon: "ipad.sizes",
+                                isOn: config.ldnMitm,
+                                info: "Modifies local wireless to function as LAN, allowing same-network connections with other Ryujinx instances and hacked Switch consoles with ldn_mitm installed. All players must be on the same game version. Leave OFF if unsure.")
+            } header: {
+                Text("Network")
+            }
+            
+            // UI Options
+            Section("Interface") {
+                NativeToggleRow("Disable Touch", icon: "hand.point.up.left.fill",
+                                isOn: nativeSettingsManager.disableTouch.projectedValue,
+                                info: "Disables the touch screen (not the virtual controller).")
+ 
+                NativeToggleRow("Menu Button (in-game)", icon: "arrow.left.circle",
+                                isOn: nativeSettingsManager.showScreenShotButton(true).projectedValue,
+                                info: "Shows an in-game menu button to exit, lock orientation (iPhone only), change aspect ratio, or change controllers.")
+                
+                Button {
+                    showingAppIconSwitcher = true
+                } label: {
+                    Text("App Icon Switcher")
+                }
+                .sheet(isPresented: $showingAppIconSwitcher) {
+                    AppIconSwitcherView()
+                }
+                
+            }
+            
+            // JIT and Updates
+            Section("JIT & Updates") {
+                HStack {
+                    Text("JIT Enabler")
+                    Spacer()
+                    Picker("", selection: nativeSettingsManager.jitProvider(JITProvider.disabled).projectedValue) {
+                        ForEach(JITProvider.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                
+                let model = UIDevice.modelName
+                if !model.contains("Mac") || !ProcessInfo.processInfo.isiOSAppOnMac {
+                    if #available(iOS 19, *) {
+                        HStack {
+                            Label("Dual Mapped JIT", systemImage: "light.strip.2")
+                            Spacer()
+                            Text("Always On (iOS 26)")
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        NativeToggleRow("Dual Mapped JIT", icon: "light.strip.2",
+                                        isOn: nativeSettingsManager.setting(forKey: "DUAL_MAPPED_JIT", default: false).projectedValue,
+                                        info: "iOS 26 / Non-TXM JIT.")
+                        .disabled(ProcessInfo.processInfo.hasTXM)
+                    }
+                } else {
+                    NativeToggleRow("Dual Mapped JIT", icon: "light.strip.2",
+                                    isOn: nativeSettingsManager.setting(forKey: "DUAL_MAPPED_JIT", default: false).projectedValue)
+                }
+                
+                NativeToggleRow("Check for Updates", icon: "square.and.arrow.down",
+                                isOn: nativeSettingsManager.checkForUpdate(true).projectedValue,
+                                info: "Automatically checks for updates on launch.")
+                
+            }
+        }
+    }
+    
+    private var hasAvailableControllers: Bool {
+        !ControllerManager.shared.allControllers
+            .filter { !contains(ControllerManager.shared.selectedControllers, value: $0) }
+            .isEmpty
+    }
+    
+    func contains(_ array: [String], value: BaseController) -> Bool {
+        array.contains { $0 == value.id }
+    }
+    
+    private func loadSettings() { ryujinxController.loadConfig() }
+}
