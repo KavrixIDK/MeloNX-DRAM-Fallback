@@ -310,7 +310,22 @@ namespace Ryujinx.HLE.Loaders.Processes
                 programId,
                 codeStart,
                 codePagesCount,
-                (ProcessCreationFlags)meta.Flags | ProcessCreationFlags.IsApplication,
+                // ASLR is disabled here on purpose: with it on, the kernel scatters
+                // the Alias/Heap/Stack/TlsIo regions randomly anywhere within the
+                // title's declared (nominal) address space, which can be as large
+                // as 512 GiB (39-bit titles) even though actual usage is normally
+                // a tiny fraction of that. On memory constrained devices we often
+                // cannot reserve tracking structures for the full nominal size (see
+                // NativePageTable/MemoryManagerHostTracked), so a randomly placed
+                // region can end up beyond what we could actually reserve, causing
+                // a crash that has nothing to do with how much RAM the title needs.
+                // With ASLR off, the kernel packs those regions tightly right after
+                // the code region instead, making real usage compact and
+                // predictable regardless of the title's nominal address space size.
+                // ASLR exists to harden guest code against exploitation; that does
+                // not meaningfully apply here, since MeloNX only runs titles the
+                // user already has full access to on their own device.
+                ((ProcessCreationFlags)meta.Flags & ~ProcessCreationFlags.EnableAslr) | ProcessCreationFlags.IsApplication,
                 0,
                 personalMmHeapPagesCount);
 

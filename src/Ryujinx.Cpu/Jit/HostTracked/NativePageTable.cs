@@ -33,21 +33,6 @@ namespace Ryujinx.Cpu.Jit.HostTracked
 
         public nint PageTablePointer => _nativePageTable.Pointer;
 
-        /// <summary>
-        /// The actual size of the guest virtual address space this page table
-        /// can service. Equal to the <c>asSize</c> passed to the constructor,
-        /// unless the full size could not be reserved (see <see cref="ReserveTable"/>),
-        /// in which case it reflects the smaller size that was actually granted.
-        /// Callers that size other address-space-derived structures (bounds
-        /// checks, page bitmaps, etc.) MUST use this value instead of the
-        /// originally requested size once the page table has been constructed -
-        /// otherwise an address that passes a bounds check against the original
-        /// (larger) size could still be out of range for this page table's
-        /// internal commitment bitmap, causing an unhandled crash instead of a
-        /// clean, catchable memory access error.
-        /// </summary>
-        public ulong EffectiveAddressSpaceSize { get; }
-
         private static readonly int[] ReserveRetryDelaysMs = { 25, 75, 200, 500 };
 
         // Smallest real Nintendo Switch address space size (the "32-bit"
@@ -139,7 +124,6 @@ namespace Ryujinx.Cpu.Jit.HostTracked
             _hostPageSize = hostPageSize;
             _pageTable = new PageTable<ulong>();
             _nativePageTable = ReserveTable(asSize, _hostPageSize, out ulong effectiveAsSize);
-            EffectiveAddressSpaceSize = effectiveAsSize;
             _pageCommitmentBitmap = new ulong[(effectiveAsSize >> _pageCommitmentBits) / (sizeof(ulong) * 8)];
 
             ulong ptStart = (ulong)_nativePageTable.Pointer;

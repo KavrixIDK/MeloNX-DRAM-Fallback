@@ -8,6 +8,7 @@ using Ryujinx.Memory.Tracking;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Ryujinx.Cpu.Jit
@@ -60,12 +61,10 @@ namespace Ryujinx.Cpu.Jit
             _unsafeMode = unsafeMode;
 
             ulong asSize = PageSize;
-            int asBits = PageBits;
 
             while (asSize < addressSpaceSize)
             {
                 asSize <<= 1;
-                asBits++;
             }
 
             if (useProtectionMirrors && !NativeSignalHandler.SupportsFaultAddressPatching())
@@ -76,35 +75,24 @@ namespace Ryujinx.Cpu.Jit
                 throw new PlatformNotSupportedException();
             }
 
-            // NativePageTable may not be able to reserve the full requested
-            // address space on memory constrained devices (mainly iOS), and
-            // falls back to a smaller one instead of throwing. Build it
-            // first, then read back how much it actually got and derive
-            // AddressSpaceBits/AddressSpaceSize/the page bitmap from THAT,
-            // instead of from the originally requested size. Otherwise an
-            // address that passes the AddressSpaceSize bounds check here
-            // (because it is within the original, larger size) could still
-            // be out of range for the native table's internal bitmap, which
-            // would crash instead of failing with a clean, catchable memory
-            // access error like the fallback is meant to produce.
+            // NativePageTable may not be able to reserve the full asSize on memory
+            // constrained devices, and instead reserves a smaller size internally
+            // (see NativePageTable.ReserveTable). AddressSpaceSize/AddressSpaceBits/
+            // _pages must all be derived from whatever it actually got, not from the
+            // original request - AddressSpaceSize in particular is also read by the
+            // guest kernel (through this CPU context) to decide how large to make its
+            // own Alias/Heap/Stack/TlsIo regions (see KPageTableBase). If the kernel
+            // kept believing the full, original size was available, it could still
+            // place a region beyond what NativePageTable can actually track, causing
+            // the exact kind of crash this is meant to prevent.
             _nativePageTable = new(asSize);
 
-            if (_nativePageTable.EffectiveAddressSpaceSize < asSize)
-            {
-                asSize = PageSize;
-                asBits = PageBits;
+            ulong effectiveAsSize = _nativePageTable.EffectiveAddressSpaceSize;
 
-                while (asSize < _nativePageTable.EffectiveAddressSpaceSize)
-                {
-                    asSize <<= 1;
-                    asBits++;
-                }
-            }
+            AddressSpaceSize = effectiveAsSize;
+            AddressSpaceBits = BitOperations.Log2(effectiveAsSize);
 
-            AddressSpaceBits = asBits;
-            AddressSpaceSize = asSize;
-
-            _pages = new ManagedPageFlags(asBits);
+            _pages = new ManagedPageFlags(AddressSpaceBits);
             _addressSpace = new(Tracking, backingMemory, _nativePageTable, useProtectionMirrors);
         }
 
