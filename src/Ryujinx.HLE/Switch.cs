@@ -247,8 +247,6 @@ namespace Ryujinx.HLE
         public bool WaitFifo() => Gpu.GPFifo.WaitForCommands();
         public bool ConsumeFrameAvailable() => Gpu.Window.ConsumeFrameAvailable();
         public void PresentFrame(Action swapBuffersCallback) => Gpu.Window.Present(swapBuffersCallback);
-        public bool PresentLoop(Action swapBuffersCallback) => Gpu.Window.PresentLoop(swapBuffersCallback);
-        public void SetUnboundedPresentTargetFps(int targetFps) => Gpu.Window.SetUnboundedPresentTargetFps(targetFps);
         public void DisposeGpu() => Gpu.Dispose();
 
         public void Dispose()
