@@ -1,0 +1,104 @@
+{
+  "Locales": [
+    {
+      "ID": "MenuBarActions_StartCapture",
+      "Translations": {
+        "ar_SA": "",
+        "de_DE": "",
+        "el_GR": "",
+        "en_US": "Start RenderDoc Frame Capture",
+        "es_ES": "Iniciar una captura de fotograma de RenderDoc",
+        "fr_FR": "Démarrer une capture de trame RenderDoc",
+        "he_IL": "",
+        "it_IT": "",
+        "ja_JP": "",
+        "ko_KR": "RenderDoc 프레임 캡처 시작",
+        "no_NO": "",
+        "pl_PL": "",
+        "pt_BR": "",
+        "ru_RU": "",
+        "sv_SE": "",
+        "th_TH": "",
+        "tr_TR": "",
+        "uk_UA": "",
+        "zh_CN": "启动 RenderDoc 帧捕获",
+        "zh_TW": "啟動 RenderDoc 畫格擷取"
+      }
+    },
+    {
+      "ID": "MenuBarActions_EndCapture",
+      "Translations": {
+        "ar_SA": "",
+        "de_DE": "",
+        "el_GR": "",
+        "en_US": "End RenderDoc Frame Capture",
+        "es_ES": "Detener la captura de fotograma de RenderDoc",
+        "fr_FR": "Arrêter la capture de trame RenderDoc",
+        "he_IL": "",
+        "it_IT": "",
+        "ja_JP": "",
+        "ko_KR": "RenderDoc 프레임 캡처 종료",
+        "no_NO": "",
+        "pl_PL": "",
+        "pt_BR": "",
+        "ru_RU": "",
+        "sv_SE": "",
+        "th_TH": "",
+        "tr_TR": "",
+        "uk_UA": "",
+        "zh_CN": "结束 RenderDoc 帧捕获",
+        "zh_TW": "停止 RenderDoc 畫格擷取"
+      }
+    },
+    {
+      "ID": "MenuBarActions_DiscardCapture",
+      "Translations": {
+        "ar_SA": "",
+        "de_DE": "",
+        "el_GR": "",
+        "en_US": "Discard RenderDoc Frame Capture",
+        "es_ES": "Descartar la captura de fotograma de RenderDoc",
+        "fr_FR": "Supprimer la capture de trame RenderDoc",
+        "he_IL": "",
+        "it_IT": "",
+        "ja_JP": "",
+        "ko_KR": "RenderDoc 프레임 캡처 폐기",
+        "no_NO": "",
+        "pl_PL": "",
+        "pt_BR": "",
+        "ru_RU": "",
+        "sv_SE": "",
+        "th_TH": "",
+        "tr_TR": "",
+        "uk_UA": "",
+        "zh_CN": "丢弃 RenderDoc 帧捕获",
+        "zh_TW": "捨棄 RenderDoc 畫格擷取"
+      }
+    },
+    {
+      "ID": "MenuBarActions_DiscardCapture_ToolTip",
+      "Translations": {
+        "ar_SA": "",
+        "de_DE": "",
+        "el_GR": "",
+        "en_US": "Ends the currently active RenderDoc Frame Capture, immediately discarding its result.",
+        "es_ES": "Finaliza la captura de fotograma de RenderDoc actualmente activa y descarta inmediatamente su resultado.",
+        "fr_FR": "Met fin à la capture de trame RenderDoc en cours, en supprimant immédiatement son résultat.",
+        "he_IL": "",
+        "it_IT": "",
+        "ja_JP": "",
+        "ko_KR": "현재 활성화된 RenderDoc 프레임 캡처를 종료하고 결과를 즉시 폐기합니다.",
+        "no_NO": "",
+        "pl_PL": "",
+        "pt_BR": "",
+        "ru_RU": "",
+        "sv_SE": "",
+        "th_TH": "",
+        "tr_TR": "",
+        "uk_UA": "",
+        "zh_CN": "结束当前正在进行的 RenderDoc 帧捕获，并立即丢弃其结果。",
+        "zh_TW": "停止正在執行的 RenderDoc 畫格擷取，且立即捨棄其結果。"
+      }
+    }
+  ]
+}

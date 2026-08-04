@@ -1,0 +1,15 @@
+framework module SDL3 {
+  umbrella header "SDL.h"
+
+  textual header "SDL_begin_code.h"
+  textual header "SDL_close_code.h"
+  textual header "SDL_main_impl.h"
+
+  explicit module Main {
+    header "SDL_main.h"
+    export *
+  }
+
+  export *
+  module * { export * }
+}

@@ -1,0 +1,354 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.34521,0.30200,0.83154,1.00000",
+          "display-p3:0.63405,0.20714,0.18498,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
+  "groups" : [
+    {
+      "blend-mode-specializations" : [
+        {
+          "appearance" : "tinted",
+          "value" : "normal"
+        }
+      ],
+      "blur-material" : 0.1,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "display-p3:0.03922,0.10588,0.13725,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "automatic-gradient" : "extended-gray:0.00000,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Star.svg",
+          "name" : "Calyx",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -225,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "display-p3:0.17647,0.05490,0.04314,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "automatic-gradient" : "extended-gray:0.00000,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Melo Seeds.svg",
+          "name" : "Melo Seeds",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              250,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Decoration",
+      "position" : {
+        "scale" : 0.65,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0.5,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.12055,0.31871,0.56008,1.00000",
+                  "display-p3:0.35738,0.75653,0.86881,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:0.86168,0.86168,0.86168,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Left Joy Con Rectangle.svg",
+          "name" : "Left Joy Con Rectangle",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -330,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.51994,0.16136,0.12498,1.00000",
+                  "display-p3:0.81152,0.24365,0.17712,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "extended-gray:0.75000,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "Right Joy Con Rectangle.svg",
+          "name" : "Right Joy Con Rectangle",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              330,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Joy Cons",
+      "position" : {
+        "scale" : 0.65,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.2
+      },
+      "specular" : true,
+      "translucency-specializations" : [
+        {
+          "value" : {
+            "enabled" : true,
+            "value" : 0.1
+          }
+        },
+        {
+          "appearance" : "tinted",
+          "value" : {
+            "enabled" : true,
+            "value" : 0.75
+          }
+        }
+      ]
+    },
+    {
+      "blend-mode" : "normal",
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.33359,0.20918,0.36330,1.00000",
+                  "display-p3:0.23686,0.07638,0.27392,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:0.51253,0.52155,0.78266,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Left Joy Con Outline.svg",
+          "name" : "Left Joy Con Outline",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -330,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.24898,0.35432,0.21898,1.00000",
+                  "display-p3:0.14026,0.30103,0.09711,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:0.35484,0.77235,0.24810,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "Right Joy Con Outline.svg",
+          "name" : "Right Joy Con Outline",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              330,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Edge",
+      "position" : {
+        "scale" : 0.65,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow-specializations" : [
+        {
+          "value" : {
+            "kind" : "layer-color",
+            "opacity" : 0.4
+          }
+        },
+        {
+          "appearance" : "dark",
+          "value" : {
+            "kind" : "neutral",
+            "opacity" : 0.5
+          }
+        }
+      ],
+      "specular" : false,
+      "translucency-specializations" : [
+        {
+          "value" : {
+            "enabled" : true,
+            "value" : 0.5
+          }
+        },
+        {
+          "appearance" : "tinted",
+          "value" : {
+            "enabled" : true,
+            "value" : 1
+          }
+        }
+      ]
+    },
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.36084,0.30591,0.81592,1.00000",
+              "display-p3:0.63525,0.21179,0.20789,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 1,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "hidden-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "light",
+              "value" : false
+            }
+          ],
+          "image-name" : "Melo Gradient.svg",
+          "name" : "Melo Gradient",
+          "position" : {
+            "scale" : 2.51,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Role Icons",
+      "position-specializations" : [
+        {
+          "idiom" : "watchOS",
+          "value" : {
+            "scale" : 1.07,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
