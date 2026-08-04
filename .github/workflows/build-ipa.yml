@@ -8,6 +8,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clear SPM Cache
+        run: rm -rf ~/Library/Caches/org.swift.swiftpm
+
       - name: Install .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
