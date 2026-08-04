@@ -1,8 +1,10 @@
 using Ryujinx.Common;
+using Ryujinx.Common.Logging;
 using Ryujinx.Memory;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Ryujinx.Cpu
 {
@@ -183,11 +185,69 @@ namespace Ryujinx.Cpu
         private readonly ulong _blockAlignment;
         private readonly MemoryAllocationFlags _allocationFlags;
 
+        private static readonly int[] BlockReserveRetryDelaysMs = { 25, 75, 200, 500 };
+
         public PrivateMemoryAllocatorImpl(ulong blockAlignment, MemoryAllocationFlags allocationFlags)
         {
             _blocks = [];
             _blockAlignment = blockAlignment;
             _allocationFlags = allocationFlags;
+        }
+
+        /// <summary>
+        /// Reserves a new backing block, starting at <paramref name="idealSize"/>
+        /// bytes (the requested size rounded up to <see cref="_blockAlignment"/>,
+        /// which can be as large as 4GB for address space partitions). On memory
+        /// constrained devices (mainly iOS) that reservation can be refused even
+        /// though a smaller one would succeed, so this retries the ideal size
+        /// with a short backoff first, then falls back to progressively smaller
+        /// blocks instead of crashing - but never below <paramref name="minSize"/>,
+        /// which is the minimum needed to actually hold this specific allocation.
+        /// </summary>
+        private MemoryBlock ReserveBlockMemory(ulong idealSize, ulong minSize)
+        {
+            ulong size = idealSize;
+
+            while (true)
+            {
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        MemoryBlock block = new(size, _allocationFlags);
+
+                        if (size != idealSize)
+                        {
+                            Logger.Warning?.Print(LogClass.Cpu,
+                                $"Could not reserve a {idealSize}-byte private memory block, continuing with {size} bytes instead. " +
+                                "This block will hold fewer future allocations than usual and may be replaced more often.");
+                        }
+
+                        return block;
+                    }
+                    catch (SystemException)
+                    {
+                        if (attempt < BlockReserveRetryDelaysMs.Length)
+                        {
+                            Thread.Sleep(BlockReserveRetryDelaysMs[attempt]);
+                            continue;
+                        }
+
+                        if (size <= minSize)
+                        {
+                            // Nothing worked, not even the minimum size actually
+                            // needed for this allocation - let the original
+                            // failure surface.
+                            throw;
+                        }
+
+                        break;
+                    }
+                }
+
+                ulong halved = size / 2;
+                size = halved > minSize ? halved : minSize;
+            }
         }
 
         protected Allocation Allocate(ulong size, ulong alignment, Func<MemoryBlock, ulong, T> createBlock)
@@ -213,9 +273,10 @@ namespace Ryujinx.Cpu
             }
 
             ulong blockAlignedSize = BitUtils.AlignUp(size, _blockAlignment);
+            ulong minBlockSize = BitUtils.AlignUp(size, alignment);
 
-            MemoryBlock memory = new(blockAlignedSize, _allocationFlags);
-            T newBlock = createBlock(memory, blockAlignedSize);
+            MemoryBlock memory = ReserveBlockMemory(blockAlignedSize, minBlockSize);
+            T newBlock = createBlock(memory, memory.Size);
 
             InsertBlock(newBlock);
 
