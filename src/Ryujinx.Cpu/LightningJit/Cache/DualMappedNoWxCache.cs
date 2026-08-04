@@ -137,8 +137,15 @@ namespace Ryujinx.Cpu.LightningJit.Cache
                 (offset, size) => _sharedCache.SysIcacheInvalidate(offset, size),
                 (address, func) => RegisterFunction(address, func));
 
-            _sharedCache = new(_sharedCacheAlloc, SharedCacheSize);
-            _localCache = new(_localCacheAlloc, LocalCacheSize);
+            // Use each allocator's actual (possibly reduced, see
+            // DualMappedJitAllocator.AllocateDualMapping) size rather than the
+            // originally requested SharedCacheSize/LocalCacheSize here. The
+            // CacheMemoryAllocator below hands out offsets assuming it owns
+            // this many bytes of real, backing memory - if it were sized
+            // larger than what was actually mapped, code could end up being
+            // allocated (and written to) past the end of the real buffer.
+            _sharedCache = new(_sharedCacheAlloc, _sharedCacheAlloc.Size);
+            _localCache = new(_localCacheAlloc, _localCacheAlloc.Size);
         }
 
         public static void InitMemoryCache() 
@@ -272,12 +279,15 @@ namespace Ryujinx.Cpu.LightningJit.Cache
             List<ulong> callStack = _threadCallStack ??= [];
             callStack.Clear();
 
+            // Use the allocators' actual sizes here too (see the comment in
+            // the constructor) so this range check matches the real mapped
+            // regions if either cache had to fall back to a smaller size.
             foreach (ulong funcAddress in _stackWalker.GetCallStack(
                 framePointer,
                 _localCache.RxPointer,
-                (int)LocalCacheSize,
+                (int)_localCacheAlloc.Size,
                 _sharedCache.RxPointer,
-                (int)SharedCacheSize))
+                (int)_sharedCacheAlloc.Size))
             {
                 callStack.Add(funcAddress);
             }

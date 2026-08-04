@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.Threading;
 using Ryujinx.Common.Logging;
 using static Ryujinx.Memory.MemoryManagerUnixHelper;
 using System.Runtime.Versioning;
@@ -40,6 +41,14 @@ namespace Ryujinx.Memory
 
         static private bool usingNewMapping = false;
 
+        private static readonly int[] AllocRetryDelaysMs = { 25, 75, 200, 500 };
+
+        // Below this size the dual-mapped JIT cache would be too small to be
+        // useful for basically any title, so there is no point shrinking
+        // further - if even this can not be allocated, we let the original
+        // failure surface instead of pretending we can still run.
+        private const ulong MinJitCacheSize = 16UL * 1024 * 1024;
+
         public DualMappedJitAllocator(ulong size)
         {
             var stackTrace = new StackTrace(1, false);
@@ -72,37 +81,117 @@ namespace Ryujinx.Memory
             }
         }
 
+        /// <summary>
+        /// Allocates the dual-mapped (RX + RW) JIT memory region, starting at
+        /// <see cref="Size"/> bytes. On memory constrained devices (mainly
+        /// iOS) the kernel can refuse this reservation even though the
+        /// device would grant it a moment later, or even though a smaller
+        /// cache would fit fine - this mirrors the retry-then-shrink
+        /// approach used for guest DRAM (Switch.cs) and the native page
+        /// table (NativePageTable.cs): first retry the requested size with a
+        /// short backoff, and only if that keeps failing, fall back to a
+        /// smaller cache instead of crashing. <see cref="Size"/> is updated
+        /// to the size that was actually obtained, so callers sizing other
+        /// structures from it (see DualMappedNoWxCache) stay consistent with
+        /// what was really allocated.
+        /// </summary>
         private void AllocateDualMapping()
+        {
+            ulong size = Size;
+
+            while (true)
+            {
+                for (int attempt = 0; ; attempt++)
+                {
+                    if (TryAllocateDualMapping(size))
+                    {
+                        if (size != Size)
+                        {
+                            Logger.Warning?.Print(LogClass.Cpu,
+                                $"Could not allocate {Size} bytes of dual-mapped JIT memory, continuing with {size} bytes instead. " +
+                                "The JIT code cache will be smaller than configured and may fill up sooner for demanding titles.");
+                        }
+
+                        Size = size;
+                        return;
+                    }
+
+                    if (attempt < AllocRetryDelaysMs.Length)
+                    {
+                        Thread.Sleep(AllocRetryDelaysMs[attempt]);
+                        continue;
+                    }
+
+                    if (size <= MinJitCacheSize)
+                    {
+                        // Nothing worked, not even the smallest fallback - let
+                        // the original failure surface.
+                        throw new Exception("Failed to mmap memory");
+                    }
+
+                    break;
+                }
+
+                size /= 2;
+            }
+        }
+
+        /// <summary>
+        /// Attempts a single dual-mapping of <paramref name="size"/> bytes.
+        /// Returns false (instead of throwing) on any failure, cleaning up
+        /// any partial mapping it made along the way, so the caller can
+        /// retry or fall back to a smaller size without leaking address
+        /// space on every attempt.
+        /// </summary>
+        private bool TryAllocateDualMapping(ulong size)
         {
             nint? _mmapPtr = null;
 
             if (hasTXM)
             {
-                _mmapPtr = BreakGetJITMapping((nuint)Size);
+                _mmapPtr = BreakGetJITMapping((nuint)size);
             }
             else
             {
-                _mmapPtr = Mmap(0, Size, MmapProts.PROT_READ | MmapProts.PROT_EXEC, MmapFlags.MAP_ANONYMOUS | MmapFlags.MAP_PRIVATE, -1, 0);
+                _mmapPtr = Mmap(0, size, MmapProts.PROT_READ | MmapProts.PROT_EXEC, MmapFlags.MAP_ANONYMOUS | MmapFlags.MAP_PRIVATE, -1, 0);
             }
 
-             if (_mmapPtr == null || _mmapPtr == MAP_FAILED)
-                throw new Exception("Failed to mmap memory");
+            if (_mmapPtr == null || _mmapPtr == MAP_FAILED)
+            {
+                return false;
+            }
 
             var bufRX = (ulong)_mmapPtr;
             ulong bufRW = 0;
             uint curProt = 0, maxProt = 0;
 
-            int remapResult = vm_remap(mach_task_self(), ref bufRW, Size, 0, VM_FLAGS_ANYWHERE,
+            int remapResult = vm_remap(mach_task_self(), ref bufRW, size, 0, VM_FLAGS_ANYWHERE,
                                       mach_task_self(), bufRX, 0, ref curProt, ref maxProt, VM_INHERIT_NONE);
-            if (remapResult != KERN_SUCCESS)
-                throw new Exception($"Failed to remap RX region: {remapResult}");
 
-            int protectRWResult = vm_protect(mach_task_self(), bufRW, Size, 0, VM_PROT_READ | VM_PROT_WRITE);
+            if (remapResult != KERN_SUCCESS)
+            {
+                // Give back the RX mapping we already made before trying
+                // again, otherwise every retry/fallback attempt would leak
+                // address space.
+                munmap((nint)bufRX, size);
+
+                return false;
+            }
+
+            int protectRWResult = vm_protect(mach_task_self(), bufRW, size, 0, VM_PROT_READ | VM_PROT_WRITE);
+
             if (protectRWResult != KERN_SUCCESS)
-                throw new Exception($"Failed to set RW protection: {protectRWResult}");
+            {
+                munmap((nint)bufRW, size);
+                munmap((nint)bufRX, size);
+
+                return false;
+            }
 
             RwPtr = (nint)bufRW;
             RxPtr = (nint)_mmapPtr;
+
+            return true;
         }
 
         public void Dispose()

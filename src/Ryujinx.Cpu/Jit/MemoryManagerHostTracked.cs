@@ -58,18 +58,15 @@ namespace Ryujinx.Cpu.Jit
             _backingMemory = backingMemory;
             _invalidAccessHandler = invalidAccessHandler;
             _unsafeMode = unsafeMode;
-            AddressSpaceSize = addressSpaceSize;
 
             ulong asSize = PageSize;
             int asBits = PageBits;
 
-            while (asSize < AddressSpaceSize)
+            while (asSize < addressSpaceSize)
             {
                 asSize <<= 1;
                 asBits++;
             }
-
-            AddressSpaceBits = asBits;
 
             if (useProtectionMirrors && !NativeSignalHandler.SupportsFaultAddressPatching())
             {
@@ -79,8 +76,35 @@ namespace Ryujinx.Cpu.Jit
                 throw new PlatformNotSupportedException();
             }
 
-            _pages = new ManagedPageFlags(asBits);
+            // NativePageTable may not be able to reserve the full requested
+            // address space on memory constrained devices (mainly iOS), and
+            // falls back to a smaller one instead of throwing. Build it
+            // first, then read back how much it actually got and derive
+            // AddressSpaceBits/AddressSpaceSize/the page bitmap from THAT,
+            // instead of from the originally requested size. Otherwise an
+            // address that passes the AddressSpaceSize bounds check here
+            // (because it is within the original, larger size) could still
+            // be out of range for the native table's internal bitmap, which
+            // would crash instead of failing with a clean, catchable memory
+            // access error like the fallback is meant to produce.
             _nativePageTable = new(asSize);
+
+            if (_nativePageTable.EffectiveAddressSpaceSize < asSize)
+            {
+                asSize = PageSize;
+                asBits = PageBits;
+
+                while (asSize < _nativePageTable.EffectiveAddressSpaceSize)
+                {
+                    asSize <<= 1;
+                    asBits++;
+                }
+            }
+
+            AddressSpaceBits = asBits;
+            AddressSpaceSize = asSize;
+
+            _pages = new ManagedPageFlags(asBits);
             _addressSpace = new(Tracking, backingMemory, _nativePageTable, useProtectionMirrors);
         }
 
