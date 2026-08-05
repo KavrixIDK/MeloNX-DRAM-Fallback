@@ -119,21 +119,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
 
             Context.CommitMemory(srcPa - DramMemoryMap.DramBase, size);
 
-            try
-            {
-                _cpuMemory.Map(dstVa, srcPa - DramMemoryMap.DramBase, size, flags);
-            }
-            catch (SystemException)
-            {
-                // The host could not back this mapping (out of host address
-                // space or memory - common on memory constrained iOS
-                // devices). Report it to the guest as a normal kernel
-                // out-of-memory result instead of letting the exception
-                // escape and crash the whole emulator, the same way a lack
-                // of guest DRAM is already reported by region.AllocatePages()
-                // in SetHeapSize.
-                return KernelResult.OutOfMemory;
-            }
+            _cpuMemory.Map(dstVa, srcPa - DramMemoryMap.DramBase, size, flags);
 
             if (DramMemoryMap.IsHeapPhysicalAddress(srcPa))
             {
@@ -168,22 +154,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
 
                 Context.CommitMemory(addr, size);
 
-                try
-                {
-                    _cpuMemory.Map(currentVa, addr, size, flags);
-                }
-                catch (SystemException)
-                {
-                    // See the comment in the other MapPages overload above.
-                    // Note this can leave earlier page nodes from this same
-                    // call already mapped - there is no cheap way to unwind
-                    // a partial host mapping here, so a title that hits this
-                    // may end up torn down in a slightly untidy state rather
-                    // than perfectly rolled back. That is still far better
-                    // than taking down the whole emulator, which is what
-                    // happened before this fix.
-                    return KernelResult.OutOfMemory;
-                }
+                _cpuMemory.Map(currentVa, addr, size, flags);
 
                 if (shouldFillPages && (!OperatingSystem.IsIOS() || !flags.HasFlag(MemoryMapFlags.Private) || fillValue != 0))
                 {

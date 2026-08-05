@@ -187,6 +187,19 @@ namespace Ryujinx.Cpu
 
         private static readonly int[] BlockReserveRetryDelaysMs = { 25, 75, 200, 500 };
 
+        // Remembers the size of the last block we actually managed to
+        // reserve. On a memory constrained device, retrying the full
+        // idealSize (up to 4 GiB) from scratch on every single new block -
+        // only to fall all the way back down again - costs several seconds
+        // and several failed attempts each time (visible as multi-second
+        // gaps between "ReserveBlockMemory" log lines). Starting near the
+        // last known-good size instead skips most of that wasted cascade.
+        // We still double it each time (capped at idealSize) rather than
+        // reusing the exact same value forever, so this can grow back up if
+        // conditions improve instead of staying stuck at the first small
+        // size we ever fell back to.
+        private ulong _lastSuccessfulBlockSize;
+
         public PrivateMemoryAllocatorImpl(ulong blockAlignment, MemoryAllocationFlags allocationFlags)
         {
             _blocks = [];
@@ -197,16 +210,21 @@ namespace Ryujinx.Cpu
         /// <summary>
         /// Reserves a new backing block, starting at <paramref name="idealSize"/>
         /// bytes (the requested size rounded up to <see cref="_blockAlignment"/>,
-        /// which can be as large as 4GB for address space partitions). On memory
-        /// constrained devices (mainly iOS) that reservation can be refused even
-        /// though a smaller one would succeed, so this retries the ideal size
-        /// with a short backoff first, then falls back to progressively smaller
-        /// blocks instead of crashing - but never below <paramref name="minSize"/>,
-        /// which is the minimum needed to actually hold this specific allocation.
+        /// which can be as large as 4GB for address space partitions) - or, if a
+        /// previous call already had to fall back to a smaller size, starting
+        /// closer to that instead (see <see cref="_lastSuccessfulBlockSize"/>).
+        /// On memory constrained devices (mainly iOS) that reservation can be
+        /// refused even though a smaller one would succeed, so this retries
+        /// the starting size with a short backoff first, then falls back to
+        /// progressively smaller blocks instead of crashing - but never below
+        /// <paramref name="minSize"/>, which is the minimum needed to actually
+        /// hold this specific allocation.
         /// </summary>
         private MemoryBlock ReserveBlockMemory(ulong idealSize, ulong minSize)
         {
-            ulong size = idealSize;
+            ulong size = _lastSuccessfulBlockSize == 0
+                ? idealSize
+                : Math.Clamp(_lastSuccessfulBlockSize * 2, minSize, idealSize);
 
             while (true)
             {
@@ -222,6 +240,8 @@ namespace Ryujinx.Cpu
                                 $"Could not reserve a {idealSize}-byte private memory block, continuing with {size} bytes instead. " +
                                 "This block will hold fewer future allocations than usual and may be replaced more often.");
                         }
+
+                        _lastSuccessfulBlockSize = size;
 
                         return block;
                     }
