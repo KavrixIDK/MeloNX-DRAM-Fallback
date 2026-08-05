@@ -85,7 +85,15 @@ namespace Ryujinx.HLE
         // titles that genuinely need more than that.
         private static readonly ulong[] DramFallbackSizes =
         {
-            3UL * 1024 * 1024 * 1024,
+            // 3 GiB was removed as a step here on purpose: on a 3 GiB device,
+            // successfully reserving 3 GiB for DRAM alone leaves almost no
+            // headroom for everything reserved afterwards in the same load
+            // (native page table, JIT caches, private memory blocks, GPU
+            // buffers) - even though the DRAM reservation itself succeeds,
+            // those later reservations were observed to fail outright with
+            // nothing left to fall back to. Starting the fallback at 2 GiB
+            // trades some headroom in the title's own RAM for headroom in
+            // the rest of the loading pipeline.
             2UL * 1024 * 1024 * 1024,
             (3UL * 1024 * 1024 * 1024) / 2,
             1UL * 1024 * 1024 * 1024,
