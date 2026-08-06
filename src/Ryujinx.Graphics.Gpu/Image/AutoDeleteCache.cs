@@ -58,6 +58,7 @@ namespace Ryujinx.Graphics.Gpu.Image
 
         private const float MemoryScaleFactor = 0.50f;
         private ulong _maxCacheMemoryUsage = DefaultTextureSizeCapacity;
+        private const ulong LowMemoryTextureSizeCapacity = 384UL * 1024 * 1024;
 
         private readonly LinkedList<Texture> _textures;
         private ulong _totalSize;
@@ -80,6 +81,24 @@ namespace Ryujinx.Graphics.Gpu.Image
         public void Initialize(GpuContext context, ulong cpuMemorySize)
         {
             ulong cpuMemorySizeGiB = cpuMemorySize / GiB;
+
+            if (cpuMemorySizeGiB < 4)
+            {
+                // Below 4 GiB of device RAM, without Extended Virtual Addressing,
+                // every byte the texture cache holds is a byte that is not
+                // available for the guest DRAM reservation, JIT caches, or
+                // native page table (see Switch.cs/NativePageTable.cs/
+                // PrivateMemoryAllocator.cs) - all of which compete for the same
+                // small, fixed virtual address space budget iOS grants on these
+                // devices. 1 GiB (the normal default below) is a meaningful
+                // chunk of a budget that may only be a few GiB usable in total,
+                // so devices in this tier get a smaller cap instead.
+                _maxCacheMemoryUsage = LowMemoryTextureSizeCapacity;
+
+                Logger.Info?.Print(LogClass.Gpu, $"AutoDelete Cache Allocated VRAM : {_maxCacheMemoryUsage / (1024 * 1024)} MiB (reduced for low memory device)");
+
+                return;
+            }
 
             if (cpuMemorySizeGiB < 6 || context.Capabilities.MaximumGpuMemory == 0)
             {

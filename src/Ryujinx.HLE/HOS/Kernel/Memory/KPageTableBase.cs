@@ -25,6 +25,12 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
 
         private const ulong RegionAlignment = 0x200000;
 
+        // See the comment where this is used (AddressSpace64Bit region setup)
+        // for why this cap exists. 2 GiB comfortably covers real-world Alias/
+        // TlsIo usage while removing most of the unnecessary address space
+        // cost on memory constrained iOS devices.
+        private const ulong MaxAliasOrTlsIoRegionSize = 2UL * 1024 * 1024 * 1024;
+
         public const int PageSize = 0x1000;
 
         private const int KMemoryBlockSize = 0x40;
@@ -256,6 +262,25 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
                         AliasRegionExtraSize = addrSpaceEnd / 8;
                         aliasRegion.Size += AliasRegionExtraSize;
                     }
+
+                    // Alias and TlsIo are sized as large fractions of the
+                    // nominal (or effectively reserved) guest address space -
+                    // up to 64 GiB each - to mirror what real Switch hardware's
+                    // page tables can address. Real hardware only ever has up
+                    // to 12 GiB of actual DRAM, so no title can legitimately
+                    // need anywhere near that much Alias/TlsIo mapping in
+                    // practice; the large nominal size is just theoretical
+                    // headroom. On iOS, without Extended Virtual Addressing,
+                    // that headroom is not free: NativePageTable's own tracking
+                    // cost scales with it (roughly nominalSize / 512 bytes of
+                    // real address space), competing with the DRAM reservation,
+                    // JIT caches, and everything else for the same small,
+                    // fixed budget (see Switch.cs/NativePageTable.cs). Capping
+                    // these two regions removes most of that theoretical, all
+                    // but unused headroom without touching what titles actually
+                    // rely on (Heap and Stack keep their normal sizes above).
+                    aliasRegion.Size = Math.Min(aliasRegion.Size, MaxAliasOrTlsIoRegionSize);
+                    tlsIoRegion.Size = Math.Min(tlsIoRegion.Size, MaxAliasOrTlsIoRegionSize);
 
                     break;
 
