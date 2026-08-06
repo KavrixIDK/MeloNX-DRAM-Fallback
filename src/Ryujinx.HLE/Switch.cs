@@ -85,18 +85,18 @@ namespace Ryujinx.HLE
         // titles that genuinely need more than that.
         private static readonly ulong[] DramFallbackSizes =
         {
-            // 3 GiB was removed as a step here on purpose: on a 3 GiB device,
-            // successfully reserving 3 GiB for DRAM alone leaves almost no
-            // headroom for everything reserved afterwards in the same load
-            // (native page table, JIT caches, private memory blocks, GPU
-            // buffers) - even though the DRAM reservation itself succeeds,
-            // those later reservations were observed to fail outright with
-            // nothing left to fall back to. Starting the fallback at 2 GiB
-            // trades some headroom in the title's own RAM for headroom in
-            // the rest of the loading pipeline.
-            2UL * 1024 * 1024 * 1024,
-            (3UL * 1024 * 1024 * 1024) / 2,
+            // Started at 3 GiB, then 2 GiB, in earlier testing - both still
+            // left the device unable to grow the title's heap later (see
+            // KPageTableBase.SetHeapSize), which turned out to draw from a
+            // completely separate reservation (PrivateMemoryAllocator, via
+            // MemoryMapFlags.Private), not from this DRAM block at all. So
+            // shrinking DRAM further does not take anything away from heap
+            // growth - it only frees up more of the shared iOS address space
+            // budget for it. Starting at 1 GiB now to test that directly.
             1UL * 1024 * 1024 * 1024,
+            3UL * 1024 * 1024 * 1024 / 4,
+            1UL * 1024 * 1024 * 1024 / 2,
+            1UL * 1024 * 1024 * 1024 / 4,
         };
 
         /// <summary>
