@@ -151,8 +151,8 @@ namespace Ryujinx.Cpu.LightningJit.Cache
         {
             _stackWalker = stackWalker;
             _translator = translator;
-            _sharedCache = new(allocator, SharedCacheSize);
-            _localCache = new(allocator, LocalCacheSize);
+            _sharedCache = new(allocator, (ulong)SharedCacheSize);
+            _localCache = new(allocator, (ulong)LocalCacheSize);
             _pendingMap = new(_sharedCache.ReprotectAsRx, RegisterFunction);
         }
 
