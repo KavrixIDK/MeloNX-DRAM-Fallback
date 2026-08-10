@@ -1,10 +1,8 @@
 using Ryujinx.Common;
-using Ryujinx.Common.Logging;
 using Ryujinx.Memory;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 
 namespace Ryujinx.Cpu
 {
@@ -185,89 +183,11 @@ namespace Ryujinx.Cpu
         private readonly ulong _blockAlignment;
         private readonly MemoryAllocationFlags _allocationFlags;
 
-        private static readonly int[] BlockReserveRetryDelaysMs = { 25, 75, 200, 500 };
-
-        // Remembers the size of the last block we actually managed to
-        // reserve. On a memory constrained device, retrying the full
-        // idealSize (up to 4 GiB) from scratch on every single new block -
-        // only to fall all the way back down again - costs several seconds
-        // and several failed attempts each time (visible as multi-second
-        // gaps between "ReserveBlockMemory" log lines). Starting near the
-        // last known-good size instead skips most of that wasted cascade.
-        // We still double it each time (capped at idealSize) rather than
-        // reusing the exact same value forever, so this can grow back up if
-        // conditions improve instead of staying stuck at the first small
-        // size we ever fell back to.
-        private ulong _lastSuccessfulBlockSize;
-
         public PrivateMemoryAllocatorImpl(ulong blockAlignment, MemoryAllocationFlags allocationFlags)
         {
             _blocks = [];
             _blockAlignment = blockAlignment;
             _allocationFlags = allocationFlags;
-        }
-
-        /// <summary>
-        /// Reserves a new backing block, starting at <paramref name="idealSize"/>
-        /// bytes (the requested size rounded up to <see cref="_blockAlignment"/>,
-        /// which can be as large as 4GB for address space partitions) - or, if a
-        /// previous call already had to fall back to a smaller size, starting
-        /// closer to that instead (see <see cref="_lastSuccessfulBlockSize"/>).
-        /// On memory constrained devices (mainly iOS) that reservation can be
-        /// refused even though a smaller one would succeed, so this retries
-        /// the starting size with a short backoff first, then falls back to
-        /// progressively smaller blocks instead of crashing - but never below
-        /// <paramref name="minSize"/>, which is the minimum needed to actually
-        /// hold this specific allocation.
-        /// </summary>
-        private MemoryBlock ReserveBlockMemory(ulong idealSize, ulong minSize)
-        {
-            ulong size = _lastSuccessfulBlockSize == 0
-                ? idealSize
-                : Math.Clamp(_lastSuccessfulBlockSize * 2, minSize, idealSize);
-
-            while (true)
-            {
-                for (int attempt = 0; ; attempt++)
-                {
-                    try
-                    {
-                        MemoryBlock block = new(size, _allocationFlags);
-
-                        if (size != idealSize)
-                        {
-                            Logger.Warning?.Print(LogClass.Cpu,
-                                $"Could not reserve a {idealSize}-byte private memory block, continuing with {size} bytes instead. " +
-                                "This block will hold fewer future allocations than usual and may be replaced more often.");
-                        }
-
-                        _lastSuccessfulBlockSize = size;
-
-                        return block;
-                    }
-                    catch (SystemException)
-                    {
-                        if (attempt < BlockReserveRetryDelaysMs.Length)
-                        {
-                            Thread.Sleep(BlockReserveRetryDelaysMs[attempt]);
-                            continue;
-                        }
-
-                        if (size <= minSize)
-                        {
-                            // Nothing worked, not even the minimum size actually
-                            // needed for this allocation - let the original
-                            // failure surface.
-                            throw;
-                        }
-
-                        break;
-                    }
-                }
-
-                ulong halved = size / 2;
-                size = halved > minSize ? halved : minSize;
-            }
         }
 
         protected Allocation Allocate(ulong size, ulong alignment, Func<MemoryBlock, ulong, T> createBlock)
@@ -293,10 +213,9 @@ namespace Ryujinx.Cpu
             }
 
             ulong blockAlignedSize = BitUtils.AlignUp(size, _blockAlignment);
-            ulong minBlockSize = BitUtils.AlignUp(size, alignment);
 
-            MemoryBlock memory = ReserveBlockMemory(blockAlignedSize, minBlockSize);
-            T newBlock = createBlock(memory, memory.Size);
+            MemoryBlock memory = new(blockAlignedSize, _allocationFlags);
+            T newBlock = createBlock(memory, blockAlignedSize);
 
             InsertBlock(newBlock);
 

@@ -14,8 +14,30 @@ namespace Ryujinx.Cpu.LightningJit.Cache
     class DualMappedNoWxCache : IDisposable
     {
         private const int CodeAlignment = 4; // Bytes.
-        private static ulong SharedCacheSize = DualMappedJitAllocator.hasTXM ? (ulong)512 * 1024 * 1024 : 1024 * 1024 * 1024;
-        private static ulong LocalCacheSize = 256 * 1024 * 1024;
+
+        // NOTE: because this cache is always dual-mapped (RW + RX views of the same pages,
+        // see DualMappedJitAllocator), the *actual* virtual address space cost of these two
+        // fields combined is 2x(SharedCacheSize + LocalCacheSize), not 1x. At the original
+        // fixed sizes that is up to ~2.5 GiB on non-TXM devices, reserved unconditionally,
+        // which alone can exceed the entire usable VA budget on a low-RAM iOS device without
+        // the Extended Virtual Addressing entitlement (~3.3 GiB on a 3 GB device). Values
+        // below are heuristic - smaller than default but still large enough to hold many
+        // translated functions. Note that filling this cache still throws an uncaught
+        // OutOfMemoryException today (nothing in this codebase catches it, verified by
+        // grepping the whole repo) - shrinking it trades a near-certain crash at startup
+        // (the 2.5 GiB mmap/vm_remap itself failing with "Cannot allocate memory") for a
+        // much less frequent one later in a play session for unusually code-heavy games.
+        // Adding a catch around Translator's cache Map() calls to fail a single translation
+        // instead of the whole process would be a good follow-up, independent of this change.
+        // Tune the sizes below after on-device testing against real games.
+        private static ulong SharedCacheSize =
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)192 * 1024 * 1024
+            : DeviceMemoryInfo.IsLowMemoryDevice ? (ulong)320 * 1024 * 1024
+            : DualMappedJitAllocator.hasTXM ? (ulong)512 * 1024 * 1024 : 1024 * 1024 * 1024;
+        private static ulong LocalCacheSize =
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)48 * 1024 * 1024
+            : DeviceMemoryInfo.IsLowMemoryDevice ? (ulong)96 * 1024 * 1024
+            : 256 * 1024 * 1024;
 
         // How many calls to the same function we allow until we pad the shared cache to force the function to become available there
         // and allow the guest to take the fast path.
@@ -137,15 +159,8 @@ namespace Ryujinx.Cpu.LightningJit.Cache
                 (offset, size) => _sharedCache.SysIcacheInvalidate(offset, size),
                 (address, func) => RegisterFunction(address, func));
 
-            // Use each allocator's actual (possibly reduced, see
-            // DualMappedJitAllocator.AllocateDualMapping) size rather than the
-            // originally requested SharedCacheSize/LocalCacheSize here. The
-            // CacheMemoryAllocator below hands out offsets assuming it owns
-            // this many bytes of real, backing memory - if it were sized
-            // larger than what was actually mapped, code could end up being
-            // allocated (and written to) past the end of the real buffer.
-            _sharedCache = new(_sharedCacheAlloc, _sharedCacheAlloc.Size);
-            _localCache = new(_localCacheAlloc, _localCacheAlloc.Size);
+            _sharedCache = new(_sharedCacheAlloc, SharedCacheSize);
+            _localCache = new(_localCacheAlloc, LocalCacheSize);
         }
 
         public static void InitMemoryCache() 
@@ -279,15 +294,12 @@ namespace Ryujinx.Cpu.LightningJit.Cache
             List<ulong> callStack = _threadCallStack ??= [];
             callStack.Clear();
 
-            // Use the allocators' actual sizes here too (see the comment in
-            // the constructor) so this range check matches the real mapped
-            // regions if either cache had to fall back to a smaller size.
             foreach (ulong funcAddress in _stackWalker.GetCallStack(
                 framePointer,
                 _localCache.RxPointer,
-                (int)_localCacheAlloc.Size,
+                (int)LocalCacheSize,
                 _sharedCache.RxPointer,
-                (int)_sharedCacheAlloc.Size))
+                (int)SharedCacheSize))
             {
                 callStack.Add(funcAddress);
             }

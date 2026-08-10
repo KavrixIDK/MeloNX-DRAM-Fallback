@@ -11,8 +11,18 @@ namespace Ryujinx.Cpu.LightningJit.Cache
     class NoWxCache : IDisposable
     {
         private const int CodeAlignment = 4; // Bytes.
-        private const int SharedCacheSize = 2047 * 1024 * 1024;
-        private const int LocalCacheSize = 256 * 1024 * 1024;
+
+        // See the identical comment in DualMappedNoWxCache.cs. This class is not on iOS's
+        // default code path today (DUAL_MAPPED_JIT is forced on), but is kept consistent in
+        // case that ever changes (e.g. future TXM/entitlement behaviour).
+        private static readonly int SharedCacheSize =
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 192 * 1024 * 1024
+            : DeviceMemoryInfo.IsLowMemoryDevice ? 320 * 1024 * 1024
+            : 2047 * 1024 * 1024;
+        private static readonly int LocalCacheSize =
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 48 * 1024 * 1024
+            : DeviceMemoryInfo.IsLowMemoryDevice ? 96 * 1024 * 1024
+            : 256 * 1024 * 1024;
 
         // How many calls to the same function we allow until we pad the shared cache to force the function to become available there
         // and allow the guest to take the fast path.

@@ -4,7 +4,6 @@ using Ryujinx.Audio.Backends.CompatLayer;
 using Ryujinx.Audio.Integration;
 using Ryujinx.Common;
 using Ryujinx.Common.Configuration;
-using Ryujinx.Common.Logging;
 using Ryujinx.Cpu;
 using Ryujinx.Graphics.Gpu;
 using Ryujinx.HLE.FileSystem;
@@ -15,7 +14,6 @@ using Ryujinx.HLE.Loaders.Processes;
 using Ryujinx.HLE.UI;
 using Ryujinx.Memory;
 using System;
-using System.Threading;
 
 namespace Ryujinx.HLE
 {
@@ -68,88 +66,6 @@ namespace Ryujinx.HLE
 
         public DirtyHacks DirtyHacks { get; }
 
-        // If the OS refuses the very first reservation of guest DRAM (common on
-        // memory-constrained iOS devices, where the request can be denied even
-        // though the device would have granted it a moment later), retry a few
-        // times with short pauses before giving up. This alone fixes most cases -
-        // it is not that the device fundamentally lacks the address space, just
-        // that iOS did not have a chance to react yet.
-        private static readonly int[] DramReserveRetryDelaysMs = { 25, 75, 200, 500 };
-
-        // Only used if every retry above still fails. Falls back to smaller DRAM
-        // sizes so titles that do not actually need the full configured amount
-        // can still boot instead of crashing outright. Kernel boot itself only
-        // needs a small fraction of a GiB (see DramMemoryMap/KernelInit), so even
-        // the smallest tier here still leaves the emulator usable - just with
-        // less RAM than declared available to the title, which only matters for
-        // titles that genuinely need more than that.
-        private static readonly ulong[] DramFallbackSizes =
-        {
-            // Started at 3 GiB, then 2 GiB, in earlier testing - both still
-            // left the device unable to grow the title's heap later (see
-            // KPageTableBase.SetHeapSize), which turned out to draw from a
-            // completely separate reservation (PrivateMemoryAllocator, via
-            // MemoryMapFlags.Private), not from this DRAM block at all. So
-            // shrinking DRAM further does not take anything away from heap
-            // growth - it only frees up more of the shared iOS address space
-            // budget for it. Starting at 1 GiB now to test that directly.
-            1UL * 1024 * 1024 * 1024,
-            3UL * 1024 * 1024 * 1024 / 4,
-            1UL * 1024 * 1024 * 1024 / 2,
-            1UL * 1024 * 1024 * 1024 / 4,
-        };
-
-        /// <summary>
-        /// Reserves guest DRAM, retrying with a short backoff first, and only
-        /// falling back to a smaller size than <paramref name="requestedSize"/>
-        /// if the OS still refuses to grant it afterwards. This exists because on
-        /// memory constrained devices (mainly iOS) a single large reservation can
-        /// otherwise turn into a hard crash before emulation even starts, even
-        /// for titles that would end up using much less memory than that.
-        /// </summary>
-        private static MemoryBlock CreateGuestMemory(ulong requestedSize, MemoryAllocationFlags flags)
-        {
-            for (int attempt = 0; attempt < DramReserveRetryDelaysMs.Length; attempt++)
-            {
-                try
-                {
-                    return new MemoryBlock(requestedSize, flags);
-                }
-                catch (SystemException)
-                {
-                    Thread.Sleep(DramReserveRetryDelaysMs[attempt]);
-                }
-            }
-
-            foreach (ulong fallbackSize in DramFallbackSizes)
-            {
-                if (fallbackSize >= requestedSize)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    MemoryBlock block = new(fallbackSize, flags);
-
-                    Logger.Warning?.Print(LogClass.Emulation,
-                        $"Could not reserve {requestedSize} bytes of guest memory, continuing with {fallbackSize} bytes instead. " +
-                        "Titles that need more RAM than this may fail to run.");
-
-                    return block;
-                }
-                catch (SystemException)
-                {
-                    // Try the next, smaller size.
-                }
-            }
-
-            // Nothing worked, not even the smallest fallback - let the original
-            // error surface, there genuinely is not enough memory/address space
-            // available right now.
-            return new MemoryBlock(requestedSize, flags);
-        }
-
         public Switch(HleConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration.GpuRenderer);
@@ -167,7 +83,7 @@ namespace Ryujinx.HLE
 #pragma warning disable IDE0055 // Disable formatting
             DirtyHacks        = new DirtyHacks(Configuration.Hacks);
             AudioDeviceDriver = new CompatLayerHardwareDeviceDriver(Configuration.AudioDeviceDriver);
-            Memory            = CreateGuestMemory(Configuration.MemoryConfiguration.DramSize, memoryAllocationFlags);
+            Memory            = new MemoryBlock(Configuration.MemoryConfiguration.DramSize, memoryAllocationFlags);
             Gpu               = new GpuContext(Configuration.GpuRenderer, DirtyHacks);
             Debugger          = Configuration.EnableGdbStub ? new Debugger.Debugger(this, Configuration.GdbStubPort) : null;
             System            = new HOS.Horizon(this);

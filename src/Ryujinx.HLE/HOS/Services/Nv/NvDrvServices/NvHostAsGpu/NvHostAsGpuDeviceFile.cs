@@ -43,7 +43,19 @@ namespace Ryujinx.HLE.HOS.Services.Nv.NvDrvServices.NvHostAsGpu
 
         public NvHostAsGpuDeviceFile(ServiceCtx context, IVirtualMemoryManager memory, ulong owner) : base(context, owner)
         {
-            _asContext = new AddressSpaceContext(context.Device.Gpu.CreateMemoryManager(owner, context.Device.Memory.Size));
+            // AutoDeleteCache.Initialize documents this parameter as "physical CPU memory
+            // available on the device", but context.Device.Memory.Size is actually the
+            // guest-declared DRAM size (MemoryConfiguration, 4/6/8/12 GiB - chosen by the
+            // game, not the host device). On a real low-RAM device that mislabeling skips
+            // AutoDeleteCache's own safe/small texture budget branch for any game that
+            // declares >=6 GiB of DRAM, which is most retail titles. Prefer the real host
+            // RAM (reported by the MeloNX app shell) when known, falling back to the old
+            // behaviour otherwise so desktop Ryujinx and unknown hosts are unaffected.
+            ulong cpuMemorySize = DeviceMemoryInfo.PhysicalRamBytes > 0
+                ? DeviceMemoryInfo.PhysicalRamBytes
+                : context.Device.Memory.Size;
+
+            _asContext = new AddressSpaceContext(context.Device.Gpu.CreateMemoryManager(owner, cpuMemorySize));
             _memoryAllocator = new NvMemoryAllocator();
         }
 

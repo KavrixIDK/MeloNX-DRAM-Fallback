@@ -57,7 +57,20 @@ namespace Ryujinx.Cpu.Jit.HostTracked
 
     class AddressSpacePartitionAllocator : PrivateMemoryAllocatorImpl<AddressSpacePartitionAllocator.Block>
     {
-        private const ulong DefaultBlockAlignment = 1UL << 32; // 4GB
+        // 4GB is fine on hosts with abundant virtual address space (desktop, or iOS devices
+        // that have the Extended Virtual Addressing entitlement). On iOS devices without that
+        // entitlement and with little physical RAM, total *usable* virtual address space can
+        // be as low as ~3.3 GiB (see DeviceMemoryInfo), so reserving a single 4GB block just
+        // to back the very first 32MB guest partition can by itself exhaust the whole budget
+        // and fail with "Cannot allocate memory" (SystemException from mmap/vm_allocate).
+        // Shrinking the block size trades a few more, smaller Reserve calls for not blowing
+        // the ceiling in one shot - PrivateMemoryAllocatorImpl already allocates additional
+        // blocks on demand when one fills up, so this only affects granularity, not
+        // correctness. Values are heuristic starting points; tune after on-device testing.
+        private static readonly ulong DefaultBlockAlignment =
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 28) // 256MB
+            : DeviceMemoryInfo.IsLowMemoryDevice ? (1UL << 29)   // 512MB
+            : (1UL << 32);                                       // 4GB (unchanged default)
 
         public class Block : PrivateMemoryAllocator.Block
         {

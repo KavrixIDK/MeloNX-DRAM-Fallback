@@ -13,7 +13,12 @@ namespace Ryujinx.Graphics.Gpu.Shader.DiskCache
 {
     class ParallelDiskCacheLoader
     {
-        private const int ThreadCount = 8;
+        // Was a fixed 8 regardless of host CPU. On a 6-core device (e.g. iPad 9th gen / A13)
+        // that oversubscribes the CPU and keeps up to 8 full shader translations (IR trees,
+        // buffers, etc.) live at once during disk cache warm-up, a memory and CPU spike sized
+        // for an 8+ core desktop. Scale to the actual core count instead, same pattern already
+        // used in Vulkan's BackgroundCompilationScheduler.GetBackgroundShaderCompileThreadCount.
+        private static readonly int ThreadCount = Math.Clamp(Environment.ProcessorCount, 1, 8);
 
         private readonly GpuContext _context;
         private readonly ShaderCacheHashTable _graphicsCache;

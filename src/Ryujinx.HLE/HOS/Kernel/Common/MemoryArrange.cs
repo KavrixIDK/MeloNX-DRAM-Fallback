@@ -9,5 +9,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
         MemoryArrange6GiBAppletDev,
         MemoryArrange8GiB,
         MemoryArrange12GiB,
+        // MeloNX addition, see MemoryConfiguration.MemoryConfigurationLowRAM.
+        MemoryArrangeLowRAM,
     }
 }

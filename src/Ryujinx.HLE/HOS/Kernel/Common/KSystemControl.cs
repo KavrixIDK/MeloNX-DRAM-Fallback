@@ -31,6 +31,10 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange6GiB => 4916 * MiB,
                 MemoryArrange.MemoryArrange8GiB => 6964 * MiB,
                 MemoryArrange.MemoryArrange12GiB => 11060 * MiB,
+                // MeloNX addition: real 4GiB Application pool (3285 MiB) scaled to 50% for
+                // a 2 GiB total. Verified in isolation (see KernelInit.GetMemoryRegions
+                // callers) that this leaves the System/service pool positive (~100 MiB).
+                MemoryArrange.MemoryArrangeLowRAM => 1642 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -46,6 +50,8 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange6GiBAppletDev => 2193 * MiB,
                 MemoryArrange.MemoryArrange8GiB or
                 MemoryArrange.MemoryArrange12GiB => 562 * MiB,
+                // MeloNX addition: real 4GiB Applet pool (507 MiB) scaled to 50%.
+                MemoryArrange.MemoryArrangeLowRAM => 253 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -74,6 +80,8 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemorySize.MemorySize6GiB => 6 * GiB,
                 MemorySize.MemorySize8GiB => 8 * GiB,
                 MemorySize.MemorySize12GiB => 12 * GiB,
+                // MeloNX addition, see MemoryConfiguration.MemoryConfigurationLowRAM.
+                MemorySize.MemorySizeLowRAM => 2 * GiB,
                 _ => throw new ArgumentException($"Invalid memory size \"{size}\"."),
             };
         }

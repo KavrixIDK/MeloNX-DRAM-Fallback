@@ -29,6 +29,19 @@ var environment: [EnvironmentVariable] = [
 
 
 func initEnvironmentVariables() {
+    // Real physical RAM of this device, in MiB. Read once here (not gated by iOS version,
+    // unlike HAS_TXM/DUAL_MAPPED_JIT below) so the C# side (Ryujinx.Memory.DeviceMemoryInfo)
+    // can shrink otherwise-fixed reservations (JIT cache, AddressSpacePartitionAllocator's
+    // 4GB blocks, AutoDeleteCache's texture budget) on low-RAM devices like the iPad 9th
+    // generation (3 GB), which has no way to get the Extended Virtual Addressing entitlement
+    // without a paid developer account or TrollStore, and therefore a very small usable
+    // virtual address space ceiling. Devices that DO have plenty of RAM see no change, since
+    // every consumer of this value only reacts below its own low-RAM threshold.
+    let physicalMemoryMB = ProcessInfo.processInfo.physicalMemory / 1024 / 1024
+    environment.append(
+        EnvironmentVariable(string: "MELONX_DEVICE_RAM_MB", value: String(physicalMemoryMB))
+    )
+
     if let device = MTLCreateSystemDefaultDevice(), device.argumentBuffersSupport.rawValue >= MTLArgumentBuffersTier.tier2.rawValue {
         environment.append(contentsOf: [
             .init(string: "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", value: "0")

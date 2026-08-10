@@ -64,6 +64,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Ryujinx.Common.Callbacks;
 using Ryujinx.Input.Native;
+using Ryujinx.Memory;
 using Ryujinx.HLE.Utilities;
 
 namespace Ryujinx.Library 
@@ -865,8 +866,23 @@ namespace Ryujinx.Library
             else
                 appleHV = options.UseHypervisor;
 
+            // Was unconditionally MemoryConfiguration4GiB (note this also means the
+            // "Expand Guest RAM" UI toggle, options.ExpandRAM, was never actually read here -
+            // that's a separate pre-existing bug, left alone since fixing it is orthogonal to
+            // this change). On iOS devices with very little physical RAM and no Extended
+            // Virtual Addressing entitlement, the standard 4 GiB DRAM reservation alone can
+            // exceed the entire usable virtual address space ceiling (~3.3-3.4 GiB on a 3 GB
+            // device such as the iPad 9th generation), which is very likely why "Cannot
+            // allocate memory" appears before a game even starts. MemoryConfigurationLowRAM
+            // is a MeloNX-specific 2 GiB arrangement (not a real Nintendo configuration - see
+            // its definition in MemoryConfiguration.cs for how the pool split was derived) used
+            // only on such devices; every other device keeps the original, unmodified behaviour.
+            var memoryConfiguration = DeviceMemoryInfo.IsVeryLowMemoryDevice
+                ? MemoryConfiguration.MemoryConfigurationLowRAM
+                : MemoryConfiguration.MemoryConfiguration4GiB;
+
             var configuration = new HleConfiguration(
-                MemoryConfiguration.MemoryConfiguration4GiB,
+                memoryConfiguration,
                 options.SystemLanguage,
                 options.SystemRegion,
                 Ryujinx.Common.Configuration.VSyncMode.Switch,
