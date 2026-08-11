@@ -72,11 +72,16 @@ namespace Ryujinx.Cpu.Jit.HostTracked
         // further (past JIT setup, past NSO loading, into the game's first SetHeapSize
         // syscall), but the cumulative budget still ran out at that point (KERN_NO_SPACE in
         // a *different* allocator - AddressSpacePartition's own 1MB-granularity content
-        // allocator, see that file). Halving this window block further frees more of the
-        // shared budget even though it isn't the allocator that failed in that log, since the
-        // failure is about total accumulated reservations, not this allocator being wasteful.
+        // allocator, see that file). Halved to 128MB in response; a second round of testing
+        // then showed 1.5GiB DRAM (see KSystemControl.cs) was too aggressive - Mii Maker
+        // couldn't get the heap it needed and hit a guest-level Fatal error. DRAM went back
+        // up to 2GiB, so this block is instead pushed down further (64MB) to make room for
+        // that, since it's overhead this allocator can absorb via more, smaller blocks
+        // (PrivateMemoryAllocatorImpl already supports that) without costing the game any of
+        // its own usable heap the way shrinking DRAM does. Still comfortably above the actual
+        // per-call request size (~32MB partition + one guard page, AddressSpacePartition.cs).
         private static readonly ulong DefaultBlockAlignment =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 27) // 128MB
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 26) // 64MB
             : DeviceMemoryInfo.IsLowMemoryDevice ? (1UL << 29)   // 512MB
             : (1UL << 32);                                       // 4GB (unchanged default)
 

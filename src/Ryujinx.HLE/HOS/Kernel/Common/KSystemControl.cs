@@ -32,14 +32,16 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange8GiB => 6964 * MiB,
                 MemoryArrange.MemoryArrange12GiB => 11060 * MiB,
                 // MeloNX addition: real 4GiB Application pool (3285 MiB) scaled down for a
-                // low-RAM-tier total. Updated 2026-08-11 after a real-device log (iPad 9,
-                // Super Mario 3D World + Bowser's Fury) showed the previous 2 GiB total still
-                // ran out of address space at the game's first SetHeapSize call - pushed the
-                // total down further to 1.5 GiB (ratio 0.375) to free more headroom for the
-                // fixed overhead pieces (JIT cache, native page table, partition windows)
-                // that don't scale with this value. Verified in isolation that the System/
-                // service pool stays positive (~61 MiB) at these sizes.
-                MemoryArrange.MemoryArrangeLowRAM => 1232 * MiB,
+                // low-RAM-tier total. History: started at 2 GiB (1642 MiB here), dropped to
+                // 1.5 GiB (1232 MiB) after a Mario 3D World crash log showed a later-stage
+                // allocator (AddressSpacePartitionAllocator, GPU buffer reprotection) running
+                // out of room. That went too far the other way: Mii Maker's SetHeapSize then
+                // failed outright (retried for 33s, "KernelSvc: SetHeapSize(...) = OutOfMemory"
+                // in the log, then a guest Fatal error) at 1232 MiB - some system applets need
+                // more heap than they look like they should. Back to 1642 MiB; compensated for
+                // Mario's later failure by shrinking AddressSpacePartitionAllocator's window
+                // block further instead (see that file) rather than cutting this again.
+                MemoryArrange.MemoryArrangeLowRAM => 1642 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -57,7 +59,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange12GiB => 562 * MiB,
                 // MeloNX addition: real 4GiB Applet pool (507 MiB) scaled down, see
                 // GetApplicationPoolSize's MemoryArrangeLowRAM comment for the 2026-08-11 update.
-                MemoryArrange.MemoryArrangeLowRAM => 190 * MiB,
+                MemoryArrange.MemoryArrangeLowRAM => 253 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -88,7 +90,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemorySize.MemorySize12GiB => 12 * GiB,
                 // MeloNX addition, see MemoryConfiguration.MemoryConfigurationLowRAM
                 // (2026-08-11: reduced from 2 GiB to 1.5 GiB after a real crash log).
-                MemorySize.MemorySizeLowRAM => 3 * GiB / 2,
+                MemorySize.MemorySizeLowRAM => 2 * GiB,
                 _ => throw new ArgumentException($"Invalid memory size \"{size}\"."),
             };
         }
