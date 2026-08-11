@@ -16,11 +16,11 @@ namespace Ryujinx.Cpu.LightningJit.Cache
         // default code path today (DUAL_MAPPED_JIT is forced on), but is kept consistent in
         // case that ever changes (e.g. future TXM/entitlement behaviour).
         private static readonly int SharedCacheSize =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 192 * 1024 * 1024
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 96 * 1024 * 1024
             : DeviceMemoryInfo.IsLowMemoryDevice ? 320 * 1024 * 1024
             : 2047 * 1024 * 1024;
         private static readonly int LocalCacheSize =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 48 * 1024 * 1024
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? 24 * 1024 * 1024
             : DeviceMemoryInfo.IsLowMemoryDevice ? 96 * 1024 * 1024
             : 256 * 1024 * 1024;
 
@@ -151,8 +151,8 @@ namespace Ryujinx.Cpu.LightningJit.Cache
         {
             _stackWalker = stackWalker;
             _translator = translator;
-            _sharedCache = new(allocator, SharedCacheSize);
-            _localCache = new(allocator, LocalCacheSize);
+            _sharedCache = new(allocator, (ulong)SharedCacheSize);
+            _localCache = new(allocator, (ulong)LocalCacheSize);
             _pendingMap = new(_sharedCache.ReprotectAsRx, RegisterFunction);
         }
 

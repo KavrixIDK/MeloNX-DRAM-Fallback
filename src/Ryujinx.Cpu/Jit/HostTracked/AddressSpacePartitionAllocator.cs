@@ -67,8 +67,16 @@ namespace Ryujinx.Cpu.Jit.HostTracked
         // the ceiling in one shot - PrivateMemoryAllocatorImpl already allocates additional
         // blocks on demand when one fills up, so this only affects granularity, not
         // correctness. Values are heuristic starting points; tune after on-device testing.
+        // 2026-08-11 update: real-device log (iPad 9, Super Mario 3D World + Bowser's Fury)
+        // showed this 256MB size for the very-low-memory tier DOES let the app get much
+        // further (past JIT setup, past NSO loading, into the game's first SetHeapSize
+        // syscall), but the cumulative budget still ran out at that point (KERN_NO_SPACE in
+        // a *different* allocator - AddressSpacePartition's own 1MB-granularity content
+        // allocator, see that file). Halving this window block further frees more of the
+        // shared budget even though it isn't the allocator that failed in that log, since the
+        // failure is about total accumulated reservations, not this allocator being wasteful.
         private static readonly ulong DefaultBlockAlignment =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 28) // 256MB
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 27) // 128MB
             : DeviceMemoryInfo.IsLowMemoryDevice ? (1UL << 29)   // 512MB
             : (1UL << 32);                                       // 4GB (unchanged default)
 

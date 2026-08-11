@@ -30,12 +30,20 @@ namespace Ryujinx.Cpu.LightningJit.Cache
         // Adding a catch around Translator's cache Map() calls to fail a single translation
         // instead of the whole process would be a good follow-up, independent of this change.
         // Tune the sizes below after on-device testing against real games.
+        //
+        // 2026-08-11 update: real-device log (iPad 9, Super Mario 3D World + Bowser's Fury)
+        // confirmed this cache size (192+48 -> 480 MiB doubled) DOES fit - the crash moved
+        // past this point, to KPageTableBase.SetHeapSize failing with KERN_NO_SPACE (Mach
+        // error 3) inside AddressSpacePartition's private storage allocator. That means the
+        // very-low-memory tier still needs more headroom overall; halving this (pure emulator
+        // overhead, doesn't reduce the game's own heap budget) is one of the two safe levers
+        // pushed further in response, alongside AddressSpacePartitionAllocator's block size.
         private static ulong SharedCacheSize =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)192 * 1024 * 1024
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)96 * 1024 * 1024
             : DeviceMemoryInfo.IsLowMemoryDevice ? (ulong)320 * 1024 * 1024
             : DualMappedJitAllocator.hasTXM ? (ulong)512 * 1024 * 1024 : 1024 * 1024 * 1024;
         private static ulong LocalCacheSize =
-            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)48 * 1024 * 1024
+            DeviceMemoryInfo.IsVeryLowMemoryDevice ? (ulong)24 * 1024 * 1024
             : DeviceMemoryInfo.IsLowMemoryDevice ? (ulong)96 * 1024 * 1024
             : 256 * 1024 * 1024;
 
