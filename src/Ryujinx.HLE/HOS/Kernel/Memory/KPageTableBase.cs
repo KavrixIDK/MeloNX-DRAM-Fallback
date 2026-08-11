@@ -285,7 +285,18 @@ namespace Ryujinx.HLE.HOS.Kernel.Memory
 
             ulong aslrMaxOffset = mapAvailableSize - mapTotalSize;
 
-            bool aslrEnabled = flags.HasFlag(ProcessCreationFlags.EnableAslr);
+            // MeloNX addition: force ASLR off on very-low-memory iOS devices. Normally the
+            // Alias/Heap/Stack/TlsIo regions get a random offset that can land anywhere within
+            // up to ~aslrMaxOffset (hundreds of GiB for a 39-bit address space) - see the
+            // GetRandomValue calls below. With ASLR off, those regions are placed sequentially
+            // starting right after the code region instead (existing, already-supported
+            // behaviour - see the "ASLR disabled" comment further down), which keeps every
+            // address the game can legitimately use within a much smaller, predictable range.
+            // That is what makes it safe for NativePageTable (Ryujinx.Cpu/Jit/HostTracked) to
+            // reserve a far smaller table on these devices instead of one sized for the full
+            // nominal address space - see DeviceMemoryInfo.IsVeryLowMemoryDevice there for the
+            // matching change and the exact reasoning/size.
+            bool aslrEnabled = flags.HasFlag(ProcessCreationFlags.EnableAslr) && !DeviceMemoryInfo.IsVeryLowMemoryDevice;
 
             _aslrEnabled = aslrEnabled;
 

@@ -32,6 +32,8 @@ namespace Ryujinx.Cpu.Jit.HostTracked
 
         public nint PageTablePointer => _nativePageTable.Pointer;
 
+        private readonly ulong _effectiveTableBytes;
+
         public NativePageTable(ulong asSize)
         {
             ulong hostPageSize = MemoryBlock.GetPageSize();
@@ -40,10 +42,31 @@ namespace Ryujinx.Cpu.Jit.HostTracked
             _bitsPerPtPage = BitOperations.Log2((uint)_entriesPerPtPage);
             _pageCommitmentBits = PageBits + _bitsPerPtPage;
 
+            // MeloNX addition: on very-low-memory iOS devices this table is one of the single
+            // largest fixed VA reservations in the whole app (up to ~1 GiB for a 39-bit/512GiB
+            // guest address space), yet in practice a guest process only ever legitimately
+            // dereferences addresses within its Code/Alias/Heap/Stack/TlsIo regions, which -
+            // with ASLR forced off for these devices (see KPageTableBase.cs) - are laid out
+            // sequentially starting right after the code region, comfortably within 160 GiB
+            // even for the largest (Alias 64GiB + Heap up to 12GiB + Stack 2GiB + TlsIo 64GiB)
+            // combination MeloNX's own MemoryConfigurationLowRAM can produce. Capping here
+            // does NOT change what address space the CPU/guest kernel believes it has (that's
+            // controlled separately, e.g. by AddressSpaceType) - it only limits how much of
+            // this specific lookup table gets reserved. Read()/Map()/Update() below explicitly
+            // bounds-check against the capped size and throw InvalidMemoryRegionException
+            // (already used elsewhere in this file) instead of silently reading/writing out of
+            // bounds if that assumption is ever wrong for some title - safe failure over
+            // silent corruption. If you see that exception, this cap is the first thing to
+            // raise (or remove DeviceMemoryInfo.IsVeryLowMemoryDevice below to disable it).
+            ulong effectiveAsSize = DeviceMemoryInfo.IsVeryLowMemoryDevice
+                ? Math.Min(asSize, 160UL * 1024 * 1024 * 1024)
+                : asSize;
+
             _hostPageSize = hostPageSize;
             _pageTable = new PageTable<ulong>();
-            _nativePageTable = new MemoryBlock((asSize / PageSize) * PteSize + _hostPageSize, MemoryAllocationFlags.Reserve);
-            _pageCommitmentBitmap = new ulong[(asSize >> _pageCommitmentBits) / (sizeof(ulong) * 8)];
+            _nativePageTable = new MemoryBlock((effectiveAsSize / PageSize) * PteSize + _hostPageSize, MemoryAllocationFlags.Reserve);
+            _pageCommitmentBitmap = new ulong[(effectiveAsSize >> _pageCommitmentBits) / (sizeof(ulong) * 8)];
+            _effectiveTableBytes = effectiveAsSize;
 
             ulong ptStart = (ulong)_nativePageTable.Pointer;
             ulong ptEnd = ptStart + _nativePageTable.Size;
@@ -58,8 +81,25 @@ namespace Ryujinx.Cpu.Jit.HostTracked
             }
         }
 
+        private void CheckInEffectiveRange(ulong va)
+        {
+            if (va >= _effectiveTableBytes)
+            {
+                throw new InvalidMemoryRegionException(
+                    $"Guest address 0x{va:x} is outside the range NativePageTable reserved " +
+                    $"(0x{_effectiveTableBytes:x}). This device is using the low-memory address " +
+                    "space cap (see DeviceMemoryInfo.IsVeryLowMemoryDevice) - if this exception " +
+                    "is happening, that cap needs to be raised for this title.");
+            }
+        }
+
         public void Map(ulong va, ulong pa, ulong size, AddressSpacePartitioned addressSpace, MemoryBlock backingMemory, bool privateMap)
         {
+            if (size != 0)
+            {
+                CheckInEffectiveRange(va + size - 1);
+            }
+
             while (size != 0)
             {
                 _pageTable.Map(va, pa);
@@ -88,7 +128,11 @@ namespace Ryujinx.Cpu.Jit.HostTracked
             while (size != 0)
             {
                 _pageTable.Unmap(va);
-                _nativePageTable.Write((va / PageSize) * PteSize, GetPte(va, guardPagePtr));
+
+                if (va < _effectiveTableBytes)
+                {
+                    _nativePageTable.Write((va / PageSize) * PteSize, GetPte(va, guardPagePtr));
+                }
 
                 va += PageSize;
                 size -= PageSize;
@@ -97,6 +141,8 @@ namespace Ryujinx.Cpu.Jit.HostTracked
 
         public ulong Read(ulong va)
         {
+            CheckInEffectiveRange(va);
+
             ulong pte = _nativePageTable.Read<ulong>((va / PageSize) * PteSize);
 
             pte += va & ~(ulong)PageMask;
@@ -106,6 +152,11 @@ namespace Ryujinx.Cpu.Jit.HostTracked
 
         public void Update(ulong va, nint ptr, ulong size)
         {
+            if (size != 0)
+            {
+                CheckInEffectiveRange(va + size - 1);
+            }
+
             ulong remainingSize = size;
 
             while (remainingSize != 0)
