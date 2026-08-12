@@ -42,24 +42,27 @@ namespace Ryujinx.Cpu.Jit.HostTracked
             _bitsPerPtPage = BitOperations.Log2((uint)_entriesPerPtPage);
             _pageCommitmentBits = PageBits + _bitsPerPtPage;
 
-            // MeloNX addition: on very-low-memory iOS devices this table is one of the single
-            // largest fixed VA reservations in the whole app (up to ~1 GiB for a 39-bit/512GiB
-            // guest address space), yet in practice a guest process only ever legitimately
-            // dereferences addresses within its Code/Alias/Heap/Stack/TlsIo regions, which -
-            // with ASLR forced off for these devices (see KPageTableBase.cs) - are laid out
-            // sequentially starting right after the code region, comfortably within 160 GiB
-            // even for the largest (Alias 64GiB + Heap up to 12GiB + Stack 2GiB + TlsIo 64GiB)
-            // combination MeloNX's own MemoryConfigurationLowRAM can produce. Capping here
-            // does NOT change what address space the CPU/guest kernel believes it has (that's
-            // controlled separately, e.g. by AddressSpaceType) - it only limits how much of
-            // this specific lookup table gets reserved. Read()/Map()/Update() below explicitly
-            // bounds-check against the capped size and throw InvalidMemoryRegionException
-            // (already used elsewhere in this file) instead of silently reading/writing out of
-            // bounds if that assumption is ever wrong for some title - safe failure over
-            // silent corruption. If you see that exception, this cap is the first thing to
-            // raise (or remove DeviceMemoryInfo.IsVeryLowMemoryDevice below to disable it).
+            // MeloNX addition, history: originally capped this table to 160 GiB on
+            // very-low-memory devices (up to ~1 GiB -> ~320 MiB), reasoning that with ASLR
+            // forced off (see KPageTableBase.cs) the Code/Alias/Heap/Stack/TlsIo regions stay
+            // within a predictable, much smaller range. That held for Alias/Heap/Stack/TlsIo,
+            // but two real-device logs then showed a DIFFERENT, unrelated mechanism blowing
+            // past the cap: KSharedMemory mappings (svcMapSharedMemory) take an address chosen
+            // by the guest game/SDK itself (Syscall.cs MapSharedMemory's `address` parameter -
+            // not something Ryujinx picks), and the kernel only rejects it if it overlaps the
+            // Heap or Alias regions (KPageTableBase.MapSharedMemory: IsInvalidRegion /
+            // InsideHeapRegion / InsideAliasRegion) - it's free to land anywhere else in the
+            // nominal address space. One title placed it at ~296 GiB, comfortably past the 160
+            // GiB cap. The bounds check below (CheckInEffectiveRange) did exactly its job -
+            // clean InvalidMemoryRegionException instead of silent corruption - but chasing a
+            // safe cap number here is effectively unbounded (whatever the guest SDK's own
+            // allocation heuristic is, MeloNX/Ryujinx doesn't control it and a different title
+            // could place it even higher). Reverted to no cap: correctness over the ~700 MiB
+            // this would have saved. Left the machinery (DeviceMemoryInfo-gated, bounds-checked)
+            // in place in case a real, provably-safe bound is found later - as written it's a
+            // no-op since effectiveAsSize == asSize whenever the multiplier below is 1.
             ulong effectiveAsSize = DeviceMemoryInfo.IsVeryLowMemoryDevice
-                ? Math.Min(asSize, 160UL * 1024 * 1024 * 1024)
+                ? Math.Min(asSize, ulong.MaxValue)
                 : asSize;
 
             _hostPageSize = hostPageSize;

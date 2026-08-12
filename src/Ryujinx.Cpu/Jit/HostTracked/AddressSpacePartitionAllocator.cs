@@ -67,19 +67,19 @@ namespace Ryujinx.Cpu.Jit.HostTracked
         // the ceiling in one shot - PrivateMemoryAllocatorImpl already allocates additional
         // blocks on demand when one fills up, so this only affects granularity, not
         // correctness. Values are heuristic starting points; tune after on-device testing.
-        // 2026-08-11 update: real-device log (iPad 9, Super Mario 3D World + Bowser's Fury)
-        // showed this 256MB size for the very-low-memory tier DOES let the app get much
-        // further (past JIT setup, past NSO loading, into the game's first SetHeapSize
-        // syscall), but the cumulative budget still ran out at that point (KERN_NO_SPACE in
-        // a *different* allocator - AddressSpacePartition's own 1MB-granularity content
-        // allocator, see that file). Halved to 128MB in response; a second round of testing
-        // then showed 1.5GiB DRAM (see KSystemControl.cs) was too aggressive - Mii Maker
-        // couldn't get the heap it needed and hit a guest-level Fatal error. DRAM went back
-        // up to 2GiB, so this block is instead pushed down further (64MB) to make room for
-        // that, since it's overhead this allocator can absorb via more, smaller blocks
-        // (PrivateMemoryAllocatorImpl already supports that) without costing the game any of
-        // its own usable heap the way shrinking DRAM does. Still comfortably above the actual
-        // per-call request size (~32MB partition + one guard page, AddressSpacePartition.cs).
+        // 2026-08-11 updates (same day, real-device testing): started at 256MB, then 128MB,
+        // then 64MB for the very-low-memory tier as DRAM/NativePageTable tuning went back and
+        // forth (see KSystemControl.cs and NativePageTable.cs for the full history - short
+        // version: NativePageTable's ~1 GiB turned out unsafe to cap, so every other lever
+        // matters more). Tried 48MB to squeeze a little further, but BitUtils.AlignUp (used by
+        // PrivateMemoryAllocatorImpl.Allocate, base class of this allocator) is a bitmask trick
+        // - (value + (align-1)) & -align - that ONLY works correctly when align is a power of
+        // 2; 48MB isn't (it's 32+16), so that would have silently produced wrong block sizes,
+        // not just a worse number. There's no valid power-of-2 between 32 and 64 MB either way,
+        // and 32MB itself doesn't help - each partition request is ~32.02 MiB (32 MiB +
+        // one host guard page, AddressSpacePartition.cs), so it already exceeds a 32MB
+        // alignment unit and would round up to 64MB regardless. 64MB stays as the practical
+        // floor for this specific allocator.
         private static readonly ulong DefaultBlockAlignment =
             DeviceMemoryInfo.IsVeryLowMemoryDevice ? (1UL << 26) // 64MB
             : DeviceMemoryInfo.IsLowMemoryDevice ? (1UL << 29)   // 512MB
