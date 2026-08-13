@@ -97,8 +97,38 @@ namespace Ryujinx.HLE.HOS
                     case MemoryManagerMode.HostMappedUnsafe:
                         if (addressSpace == null)
                         {
-                            MemoryManagerHostTracked memoryManagerHostTracked = new(context.Memory, addressSpaceSize, mode == MemoryManagerMode.HostMappedUnsafe, invalidAccessHandler);
-                            processContext = new ArmProcessContext<MemoryManagerHostTracked>(pid, cpuEngine, _gpu, memoryManagerHostTracked, addressSpaceSize, for64Bit);
+                            // MeloNX addition: on very-low-memory iOS devices, cap the address
+                            // space size passed to MemoryManagerHostTracked (and, critically,
+                            // to KPageTableBase via ArmProcessContext.AddressSpaceSize below -
+                            // that becomes KPageTableBase's _reservedAddressSpaceSize). This
+                            // does two things at once, consistently:
+                            //  1) Ryujinx.Cpu.Jit.HostTracked.NativePageTable's reservation
+                            //     (one of the single largest fixed VA costs in the whole app)
+                            //     scales with this same value, so a 39-bit/512GiB game goes
+                            //     from a ~1 GiB table down to ~128 MiB at 36-bit/64GiB - and a
+                            //     32-bit or already-36-bit game is untouched by the Math.Min.
+                            //  2) KPageTableBase.CreateUserAddressSpace already has a fallback
+                            //     for exactly this situation (host can't back the full nominal
+                            //     address space) - when _reservedAddressSpaceSize < addrSpaceEnd
+                            //     it recomputes the Alias/Stack/TlsIo region sizes proportional
+                            //     to the smaller width using Nintendo/Ryujinx's own formula
+                            //     (bit-shifts off log2 of the reserved size), not a number this
+                            //     fork invented. That path exists for other hosts that can't
+                            //     get the full reservation either; iOS just never triggered it
+                            //     before because addressSpaceSize was always passed through
+                            //     unchanged here. Using it keeps the guest kernel's own
+                            //     reported address-space size consistent with what actually
+                            //     gets reserved, which a plain NativePageTable-only cap did NOT
+                            //     do (see that file's history comment) - that inconsistency is
+                            //     exactly what let one title's SDK-chosen shared memory address
+                            //     land past the cap and crash. Only applies to the 39-bit case
+                            //     (32-bit is 4GiB, 36-bit is 64GiB - both already <= the cap).
+                            ulong effectiveAddressSpaceSize = DeviceMemoryInfo.IsVeryLowMemoryDevice
+                                ? Math.Min(addressSpaceSize, 1UL << 36)
+                                : addressSpaceSize;
+
+                            MemoryManagerHostTracked memoryManagerHostTracked = new(context.Memory, effectiveAddressSpaceSize, mode == MemoryManagerMode.HostMappedUnsafe, invalidAccessHandler);
+                            processContext = new ArmProcessContext<MemoryManagerHostTracked>(pid, cpuEngine, _gpu, memoryManagerHostTracked, effectiveAddressSpaceSize, for64Bit);
                         }
                         else
                         {

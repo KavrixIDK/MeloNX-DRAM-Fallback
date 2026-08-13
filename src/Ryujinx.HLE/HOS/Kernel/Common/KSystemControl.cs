@@ -32,21 +32,16 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange8GiB => 6964 * MiB,
                 MemoryArrange.MemoryArrange12GiB => 11060 * MiB,
                 // MeloNX addition: real 4GiB Application pool (3285 MiB) scaled down for a
-                // low-RAM-tier total. History: 2 GiB (1642 here) -> 1.5 GiB (1232) after a
-                // Mario crash log -> back to 2 GiB after Mii Maker then failed SetHeapSize
-                // outright (1232 was not enough; 1642 confirmed enough). But at 2 GiB total,
-                // Mario regressed to failing at SetHeapSize too (a real device log showed it
-                // getting much further at 1.5 GiB) - the extra 512 MiB DRAM cost outweighed
-                // NativePageTable being capped at the time. NativePageTable's cap has since
-                // been reverted entirely (proved unsafe - see that file), which makes the
-                // overall budget tighter again, not looser. Landed on 1.75 GiB (1437 here) as
-                // a middle ground: more than the 1232 that failed Mii Maker, less than the
-                // 1642 that cost Mario its progress. Not verified against a real device at
-                // this exact value - if Mii Maker fails again, raise towards 1642; if Mario
-                // still can't get through SetHeapSize, this needs to come down instead and the
-                // real fix is elsewhere (NativePageTable is the only other GiB-scale piece,
-                // and it can't safely shrink - see that file's history comment).
-                MemoryArrange.MemoryArrangeLowRAM => 1437 * MiB,
+                // low-RAM-tier total. History: 2 GiB -> 1.5 GiB -> back to 2 GiB (see
+                // ArmProcessContextFactory.cs's 2026-08-11 update) -> 1.75 GiB as a
+                // compromise once NativePageTable's cap had to be reverted and the budget got
+                // tight again. That compromise was never actually confirmed safe for Mii Maker
+                // (only 1642 MiB/2 GiB total was). Now that ArmProcessContextFactory.cs caps
+                // the address space size itself for very-low-memory devices (which shrinks
+                // NativePageTable from ~1 GiB down to ~128 MiB - freeing far more than this
+                // pool costs), there's room to go back to the value that's actually confirmed
+                // to work for Mii Maker instead of gambling on an untested middle ground.
+                MemoryArrange.MemoryArrangeLowRAM => 1642 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -64,7 +59,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemoryArrange.MemoryArrange12GiB => 562 * MiB,
                 // MeloNX addition: real 4GiB Applet pool (507 MiB) scaled down, see
                 // GetApplicationPoolSize's MemoryArrangeLowRAM comment for the 2026-08-11 update.
-                MemoryArrange.MemoryArrangeLowRAM => 221 * MiB,
+                MemoryArrange.MemoryArrangeLowRAM => 253 * MiB,
                 _ => throw new ArgumentException($"Invalid memory arrange \"{arrange}\"."),
             };
         }
@@ -95,7 +90,7 @@ namespace Ryujinx.HLE.HOS.Kernel.Common
                 MemorySize.MemorySize12GiB => 12 * GiB,
                 // MeloNX addition, see MemoryConfiguration.MemoryConfigurationLowRAM
                 // (2026-08-11: reduced from 2 GiB to 1.5 GiB after a real crash log).
-                MemorySize.MemorySizeLowRAM => 7 * GiB / 4,
+                MemorySize.MemorySizeLowRAM => 2 * GiB,
                 _ => throw new ArgumentException($"Invalid memory size \"{size}\"."),
             };
         }
